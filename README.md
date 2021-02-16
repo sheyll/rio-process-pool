@@ -1,4 +1,4 @@
-# Concurrent Processe Pool
+# Concurrent Process Pools
 
 **NOTE:** To be able to fully view this README, use the [GitHub Pages Version](https://sheyll.github.io/rio-process-pool/).
 
