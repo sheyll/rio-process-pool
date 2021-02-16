@@ -1,0 +1,10 @@
+cradle:
+  cabal:
+    - path: "./src"
+      component: "rio-process-pool"
+    - path: "./src-benchmark"
+      component: "rio-process-pool-bench"
+    - path: "./src-test"
+      component: "rio-process-pool-test"
+    - path: "./src-memleak-test"
+      component: "rio-process-pool-memleak-test"
