@@ -17,7 +17,7 @@ test =
             [ testCase
                 "when broker creation throws an exception, the process doesn't\
                 \ block and returns an error"
-                $ runSimpleApp $ do
+                $ runTestApp $ do
                   let badPoolBox =
                         MkMockBoxInit
                           ( return
@@ -41,7 +41,7 @@ test =
               testCase
                 "when receiving from the pool input throws an exception,\
                 \ the pool exits with that exception"
-                $ runSimpleApp $ do
+                $ runTestApp $ do
                   let badPoolBox =
                         MkMockBoxInit
                           ( return
@@ -70,7 +70,7 @@ test =
               testCase
                 "when receiving from the pool input throws an exception,\
                 \ the pool exits with that exception"
-                $ runSimpleApp $ do
+                $ runTestApp $ do
                   let badPoolBox =
                         MkMockBoxInit
                           ( return
@@ -105,7 +105,7 @@ test =
             [ testCase
                 "when delivering an Initialize,\
                 \ the worker callback is executed in a new process"
-                $ runSimpleApp $ do
+                $ runTestApp $ do
                   workerIdRef <- newEmptyMVar
                   let cb = MkPoolWorkerCallback $ \_k _box ->
                         myThreadId >>= putMVar workerIdRef
@@ -122,7 +122,7 @@ test =
               testCase
                 "when delivering an Initialize and the worker message box creation fails,\
                 \ the worker will be cleaned up and not be in the pool"
-                $ runSimpleApp $ do
+                $ runTestApp $ do
                   workerIdRef <- newEmptyMVar
                   let badWorkerBox =
                         MkMockBoxInit
@@ -151,7 +151,7 @@ test =
               testCase
                 "when delivering an Initialize and the worker message box input creation fails,\
                 \ the worker will be cleaned up and not be in the pool"
-                $ runSimpleApp $ do
+                $ runTestApp $ do
                   workerIdRef <- newEmptyMVar
                   let badWorkerBox =
                         MkMockBoxInit
@@ -186,7 +186,7 @@ test =
               testCase
                 "when delivering an 'Initialize (Just Nothing)',\
                 \ the worker will be cleaned up and not be in the pool"
-                $ runSimpleApp $ do
+                $ runTestApp $ do
                   counter <- liftIO $ Atomic.newCounter 0
                   let cb = MkPoolWorkerCallback $ \_k box -> do
                         liftIO $ Atomic.incrCounter_ 1 counter
@@ -221,7 +221,7 @@ test =
               testCase
                 "when several workers are initialized with different keys,\
                 \ all are created and available in the pool."
-                $ runSimpleApp $ do
+                $ runTestApp $ do
                   startedRef <- newEmptyMVar
                   let cb = MkPoolWorkerCallback $ \k box -> do
                         putMVar startedRef k
@@ -264,7 +264,7 @@ test =
               testCase
                 "when 'Dispatch k (Just x)' is delivered, and a worker k exists,\
                 \ the worker will receive the message x, otherwise it will silently be dropped."
-                $ runSimpleApp $ do
+                $ runTestApp $ do
                   startedRef <- newEmptyMVar
                   let cb = MkPoolWorkerCallback $ \k box -> do
                         putMVar startedRef k
@@ -300,7 +300,7 @@ test =
               testCase
                 "when Dispatch k Nothing is delivered, and a worker k exists,\
                 \ the worker will be cleaned up and removed from the pool"
-                $ runSimpleApp $ do
+                $ runTestApp $ do
                   startedRef <- newEmptyMVar
                   let cb = MkPoolWorkerCallback $ \k box -> do
                         putMVar startedRef k
@@ -341,7 +341,7 @@ test =
               testCase
                 "when 'deliver' to a worker message box returns False,\
                 \ the worker is removed (and cancelled)"
-                $ runSimpleApp $ do
+                $ runTestApp $ do
                   startedRef <- newEmptyMVar
                   let cb = MkPoolWorkerCallback $ \k box -> do
                         putMVar startedRef k

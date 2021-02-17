@@ -1,4 +1,4 @@
--- | Dispatch messages to processes.
+-- | Launch- and Dispatch messages to processes.
 --
 -- A pool has an 'Input' for 'Multiplexed' messages,
 -- and dispatches incoming messges to concurrent
@@ -7,11 +7,14 @@
 -- The pool starts and stops the processes and
 -- creates the message boxes.
 --
--- The 'PoolWorkerCallback' will process the
--- 'MessageBox' until it returns, the pool
--- process will then handle cleanup of the
--- pool internal 'Broker' and the 'Async'
--- process of the worker.
+-- The user supplied 'PoolWorkerCallback' 
+-- usually runs a loop that @'receive's@ messages
+-- from the 'MessageBox' created by the pool for that worker.
+--
+-- When a worker process dies, e.g. because the 
+-- 'PoolWorkerCallback' returns, the pool
+-- process will also 'cancel' the process (just to make sure...)
+-- and cleanup the internal 'Broker'.
 module RIO.ProcessPool.Pool
   ( Pool (..),
     spawnPool,

@@ -11,6 +11,7 @@ module Utils
     NoOpArg (..),
     NoOpBox (..),
     NoOpInput (..),
+    runTestApp,
   )
 where
 
@@ -21,6 +22,12 @@ import UnliftIO.MessageBox.Class
     IsMessageBoxArg (..),
   )
 import UnliftIO.MessageBox.Util.Future (Future (Future))
+
+runTestApp :: MonadUnliftIO m => RIO LogFunc b -> m b
+runTestApp x = do
+  let isVerbose = True
+  logToStdErr <- logOptionsHandle stdout isVerbose
+  withLogFunc logToStdErr $ flip runRIO x
 
 -- message box implementation
 -- NOTE: Because of parametricity and the existential quantification

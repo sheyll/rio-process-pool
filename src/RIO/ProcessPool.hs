@@ -1,23 +1,35 @@
--- | Pools of Async Workers
+-- | Launch- and Dispatch messages to processes.
 --
--- Provide the management of processes running user supplied 
--- callbacks.
+-- A pool has an 'Input' for 'Multiplexed' messages,
+-- and dispatches incoming messges to concurrent
+-- processes using user defined @'MessageBox'es@.
 --
--- Each worker has its own 'MessageBox'.
+-- The pool starts and stops the processes and
+-- creates the message boxes.
 --
--- The Pool process has a central message box and where it
--- receives 'Multiplexed' messages.
+-- The user supplied 'PoolWorkerCallback'
+-- usually runs a loop that @'receive's@ messages
+-- from the 'MessageBox' created by the pool for that worker.
 --
--- The pool process writes the payloads to the corresponding 
--- workers message box.
---
--- This module also re-exports "UnliftIO.MessageBox" which is
--- the foundation of this library, and which is also needed
--- to get most out of this library.
+-- When a worker process dies, e.g. because the
+-- 'PoolWorkerCallback' returns, the pool
+-- process will also 'cancel' the process (just to make sure...)
+-- and cleanup the internal 'Broker'.
 module RIO.ProcessPool
-  ( module RIO.ProcessPool.Broker,
+  ( -- | A process that receives messages and dispatches them to 
+    --   a callback. 
+    --   Each message must contain a /key/ that identifies a resource.
+    --   That resource is created and cleaned by user supplied 
+    --   callback functions.    
+    module RIO.ProcessPool.Broker,
+    -- | A process that receives messages and dispatches them to 
+    --   other processes.
+    --   Building directly on "RIO.ProcessPool.Broker", it provides 
+    --   a central message box 'Input', from which messages are 
+    --   are delivered to the corresponding message box 'Input's.
     module RIO.ProcessPool.Pool,
-    module UnliftIO.MessageBox
+    -- | Re-export.
+    module UnliftIO.MessageBox,
   )
 where
 
@@ -38,5 +50,4 @@ import RIO.ProcessPool.Pool
     removePoolWorkerMessage,
     spawnPool,
   )
-  
 import UnliftIO.MessageBox

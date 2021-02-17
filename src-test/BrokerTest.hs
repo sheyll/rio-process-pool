@@ -14,6 +14,7 @@ import Utils
     NoOpArg (..),
     NoOpBox,
     NoOpInput (..),
+    runTestApp,
   )
 
 noBrokerConfig :: BrokerConfig k w' w a m
@@ -40,7 +41,7 @@ test =
         \ the exception is returned in a Left..."
         $ do
           Just (Left a) <-
-            runSimpleApp $
+            runTestApp $
               timeout 1000000 $
                 spawnBroker @_ @Int @() @() @NoOpArg
                   ( MkMockBoxInit @NoOpBox
@@ -57,7 +58,7 @@ test =
         \ the exception is returned in a Left..."
         $ do
           Just (Left a) <-
-            runSimpleApp $
+            runTestApp $
               timeout 1000000 $
                 spawnBroker @_ @Int @() @() @NoOpArg
                   ( MkMockBoxInit
@@ -80,7 +81,7 @@ test =
         \ then waiting on the broker will return the exception"
         $ do
           Just (Right (_, a)) <-
-            runSimpleApp $
+            runTestApp $
               timeout 1000000 $
                 spawnBroker @_ @Int @() @() @NoOpArg
                   ( MkMockBoxInit
@@ -96,7 +97,7 @@ test =
                       Nothing
                   )
                   noBrokerConfig
-          r <- runSimpleApp $ waitCatch a
+          r <- runTestApp $ waitCatch a
           assertEqual
             "exception expected"
             ( show
@@ -108,7 +109,7 @@ test =
       testCase
         "when evaluation of an incoming message causes an exception,\
         \ then the broker ignores the error and continues"
-        $ runSimpleApp $ do
+        $ runTestApp $ do
           spRes <-
             spawnBroker
               ( MkMockBoxInit
@@ -147,7 +148,7 @@ test =
       testCase
         "when evaluation of the first incoming message causes an async\
         \ exception, then the broker exits with that exception"
-        $ runSimpleApp $ do
+        $ runTestApp $ do
           spawnBroker
             ( MkMockBoxInit
                 ( return
@@ -188,7 +189,7 @@ test =
       testCase
         "when a broker is cancelled while waiting for the first message,\
         \ then the broker exits with AsyncCancelled"
-        $ runSimpleApp $ do
+        $ runTestApp $ do
           goOn <- newEmptyMVar
           spawnBroker @_ @Int @() @()
             ( MkMockBoxInit
@@ -222,7 +223,7 @@ test =
       testCase
         "when a broker receives a message for a missing resource,\
         \ it silently drops the message"
-        $ runSimpleApp $ do
+        $ runTestApp $ do
           let brokerCfg =
                 MkBrokerConfig
                   { demultiplexer = Dispatch (777 :: Int),
@@ -250,7 +251,7 @@ test =
         \ and the creator callback throws an exception,\
         \ a normal message for that key will be ignored,\
         \ no cleanup is performed, and the broker lives on"
-        $ runSimpleApp $ do
+        $ runTestApp $ do
           workerInitialized <- newEmptyMVar
           let brokerCfg =
                 MkBrokerConfig
@@ -291,7 +292,7 @@ test =
         \ applied to that payload, cleanup is performed once, and\
         \ incoming messages for that key will be ignored,\
         \ and the broker lives on"
-        $ runSimpleApp $ do
+        $ runTestApp $ do
           cleanupCalls <- newEmptyMVar
           let brokerCfg =
                 MkBrokerConfig
@@ -314,9 +315,9 @@ test =
                           cleanupCalls
                           (\cnt -> return (cnt + 1, ()))
                   }
-          (brokerIn, brokerA) <- 
-            either (error . show) id <$>
-            spawnBroker BlockingUnlimited brokerCfg
+          (brokerIn, brokerA) <-
+            either (error . show) id
+              <$> spawnBroker BlockingUnlimited brokerCfg
           deliver_ brokerIn True
           deliver_ brokerIn False
           threadDelay 10_000
@@ -334,7 +335,7 @@ test =
       testCase
         "when 3 resources are initialized and then the broker is cancelled,\
         \ cleanup is performed foreach resource."
-        $ runSimpleApp $ do
+        $ runTestApp $ do
           resourceCreated <- newEmptyMVar
           cleanupCalled <- newTVarIO []
           let brokerCfg =
@@ -358,9 +359,9 @@ test =
                       \k a ->
                         atomically (modifyTVar cleanupCalled ((k, a) :))
                   }
-          (brokerIn, brokerA) <- 
-            either (error . show) id <$>
-            spawnBroker BlockingUnlimited brokerCfg
+          (brokerIn, brokerA) <-
+            either (error . show) id
+              <$> spawnBroker BlockingUnlimited brokerCfg
           deliver_ brokerIn (1 :: Int)
           deliver_ brokerIn 2
           deliver_ brokerIn 3
@@ -389,7 +390,7 @@ test =
         "when 3 resources are initialized and then the broker is cancelled,\
         \ cleanup is performed foreach resource, even if exceptions are thrown\
         \ from the cleanup callbacks"
-        $ runSimpleApp $ do
+        $ runTestApp $ do
           resourceCreated <- newEmptyMVar
           cleanupCalled <- newTVarIO []
           let brokerCfg =
@@ -414,9 +415,9 @@ test =
                         atomically (modifyTVar cleanupCalled ((k, a) :))
                         throwIO expectedException
                   }
-          (brokerIn, brokerA) <- 
-            either (error . show) id <$>
-            spawnBroker BlockingUnlimited brokerCfg
+          (brokerIn, brokerA) <-
+            either (error . show) id
+              <$> spawnBroker BlockingUnlimited brokerCfg
           deliver_ brokerIn (1 :: Int)
           deliver_ brokerIn 2
           deliver_ brokerIn 3
@@ -446,7 +447,7 @@ test =
         \ while adding a 3rd an async exception is thrown\
         \ when handling the initial message,\
         \ then the broker cleans up the 3 resources and exists"
-        $ runSimpleApp $ do
+        $ runTestApp $ do
           resourceCreated <- newEmptyMVar
           cleanupCalled <- newTVarIO []
           let brokerCfg =
@@ -461,9 +462,9 @@ test =
                       \k a -> do
                         atomically (modifyTVar cleanupCalled ((k, a) :))
                   }
-          (brokerIn, brokerA) <- 
-            either (error . show) id <$>
-            spawnBroker BlockingUnlimited brokerCfg
+          (brokerIn, brokerA) <-
+            either (error . show) id
+              <$> spawnBroker BlockingUnlimited brokerCfg
           deliver_ brokerIn (1 :: Int)
           deliver_ brokerIn 2
           deliver_ brokerIn 3
@@ -493,7 +494,7 @@ test =
         \ when the messageHandler returns KeepResource,\
         \ then the resource returned from the create callback is passed to\
         \ the cleanup function"
-        $ runSimpleApp $ do
+        $ runTestApp $ do
           resourceCreated <- newEmptyMVar
           cleanupCalled <- newEmptyTMVarIO
           let brokerCfg =
@@ -510,9 +511,9 @@ test =
                   }
               initialResource :: Int
               initialResource = 123
-          (brokerIn, brokerA) <- 
-            either (error . show) id <$>
-            spawnBroker BlockingUnlimited brokerCfg
+          (brokerIn, brokerA) <-
+            either (error . show) id
+              <$> spawnBroker BlockingUnlimited brokerCfg
           deliver_ brokerIn (1 :: Int)
           takeMVar resourceCreated
             >>= liftIO
@@ -535,7 +536,7 @@ test =
         "when adding a new resource with an extra initial message,\
         \ when the messageHandler returns (UpdateResource x),\
         \ then x is passed to the cleanup function"
-        $ runSimpleApp $ do
+        $ runTestApp $ do
           resourceCreated <- newEmptyMVar
           cleanupCalled <- newEmptyTMVarIO
           let brokerCfg =
@@ -553,9 +554,9 @@ test =
               initialResource = 123
               x :: Int
               x = 234
-          (brokerIn, brokerA) <- 
-            either (error . show) id <$>
-            spawnBroker BlockingUnlimited brokerCfg
+          (brokerIn, brokerA) <-
+            either (error . show) id
+              <$> spawnBroker BlockingUnlimited brokerCfg
           deliver_ brokerIn (1 :: Int)
           takeMVar resourceCreated
             >>= liftIO
@@ -580,7 +581,7 @@ test =
         "when adding a new resource with an extra initial message,\
         \ when the messageHandler returns (RemoveResource Nothing),\
         \ then the initial resource is passed to the cleanup function"
-        $ runSimpleApp $ do
+        $ runTestApp $ do
           resourceCreated <- newEmptyMVar
           readyForCleanup <- newEmptyMVar
           cleanupCalled <- newEmptyTMVarIO
@@ -601,9 +602,9 @@ test =
                   }
               initialResource :: Int
               initialResource = 123
-          (brokerIn, brokerA) <- 
-            either (error . show) id <$>
-            spawnBroker BlockingUnlimited brokerCfg
+          (brokerIn, brokerA) <-
+            either (error . show) id
+              <$> spawnBroker BlockingUnlimited brokerCfg
           deliver_ brokerIn (1 :: Int)
           takeMVar resourceCreated
             >>= liftIO
@@ -628,7 +629,7 @@ test =
         "when adding a new resource with an extra initial message,\
         \ when the messageHandler returns (RemoveResource (Just x)),\
         \ then x is passed to the cleanup function"
-        $ runSimpleApp $ do
+        $ runTestApp $ do
           resourceCreated <- newEmptyMVar
           readyForCleanup <- newEmptyMVar
           cleanupCalled <- newEmptyTMVarIO
@@ -651,9 +652,9 @@ test =
               initialResource = 123
               x :: Int
               x = 234
-          (brokerIn, brokerA) <- 
-            either (error . show) id <$>
-            spawnBroker BlockingUnlimited brokerCfg
+          (brokerIn, brokerA) <-
+            either (error . show) id
+              <$> spawnBroker BlockingUnlimited brokerCfg
           deliver_ brokerIn (1 :: Int)
           takeMVar resourceCreated
             >>= liftIO
@@ -677,7 +678,7 @@ test =
       testCase
         "when adding a new resource without an extra initial message,\
         \ then the initial resource is passed to the cleanup function"
-        $ runSimpleApp $ do
+        $ runTestApp $ do
           resourceCreated <- newEmptyMVar
           cleanupCalled <- newEmptyTMVarIO
           let brokerCfg =
@@ -695,9 +696,9 @@ test =
               initialResource = 123
               x :: Int
               x = 234
-          (brokerIn, brokerA) <- 
-            either (error . show) id <$>
-            spawnBroker BlockingUnlimited brokerCfg
+          (brokerIn, brokerA) <-
+            either (error . show) id
+              <$> spawnBroker BlockingUnlimited brokerCfg
           deliver_ brokerIn (1 :: Int)
           takeMVar resourceCreated
             >>= liftIO
@@ -722,7 +723,7 @@ test =
         "on a broker with two resources a and b with keys 1 and 2,\
         \ for an incoming message with key=1 the MessageDispatcher is\
         \ called with resource a and for key=2 with resource b"
-        $ runSimpleApp $ do
+        $ runTestApp $ do
           messageDispatched <- newEmptyMVar
           cleanupCalled <- newTVarIO []
           let brokerCfg =
@@ -740,9 +741,9 @@ test =
                       \k a -> do
                         atomically (modifyTVar cleanupCalled ((k, a) :))
                   }
-          (brokerIn, brokerA) <- 
-            either (error . show) id <$>
-            spawnBroker BlockingUnlimited brokerCfg
+          (brokerIn, brokerA) <-
+            either (error . show) id
+              <$> spawnBroker BlockingUnlimited brokerCfg
           deliver_ brokerIn (1 :: Int, True)
           deliver_ brokerIn (2, True)
           deliver_ brokerIn (1, False)
@@ -772,7 +773,7 @@ test =
         "When the MessageDispatcher is called with resource x and \
         \ returns (UpdateResource y), then next time it is called with\
         \ resource y"
-        $ runSimpleApp $ do
+        $ runTestApp $ do
           messageDispatched <- newEmptyMVar
           let x :: Int
               x = 42
@@ -791,9 +792,9 @@ test =
                     resourceCleaner = \_k _a ->
                       return ()
                   }
-          (brokerIn, brokerA) <- 
-            either (error . show) id <$>
-            spawnBroker BlockingUnlimited brokerCfg
+          (brokerIn, brokerA) <-
+            either (error . show) id
+              <$> spawnBroker BlockingUnlimited brokerCfg
           deliver_ brokerIn True
           deliver_ brokerIn False
           deliver_ brokerIn False
@@ -814,8 +815,8 @@ test =
         "when the receive function throws a synchronous exception x,\
         \ then all resources will be cleaned up and\
         \ the broker will re-throw x"
-        $ runSimpleApp $ do
-          cr <- newTVarIO [] :: RIO SimpleApp (TVar [Int])
+        $ runTestApp $ do
+          cr <- newTVarIO []
           cl <- newTVarIO []
           let bCfg =
                 MkBrokerConfig
@@ -839,9 +840,9 @@ test =
                   )
                   (MkInterceptor (return Nothing))
                   BlockingUnlimited
-          (b, bA) <- 
-            either (error . show) id <$>
-            spawnBroker inter bCfg
+          (b, bA) <-
+            either (error . show) id
+              <$> spawnBroker inter bCfg
           deliver_ b (1 :: Int)
           deliver_ b (2 :: Int)
           deliver_ b (3 :: Int)
@@ -863,8 +864,8 @@ test =
         "when the receive function returns Nothing,\
         \ then all resources will be cleaned up and\
         \ the broker will exit."
-        $ runSimpleApp $ do
-          cr <- newTVarIO [] :: RIO SimpleApp (TVar [Int])
+        $ runTestApp $ do
+          cr <- newTVarIO []
           cl <- newTVarIO []
           let bCfg =
                 MkBrokerConfig
@@ -888,9 +889,9 @@ test =
                   )
                   (MkInterceptor (return Nothing))
                   BlockingUnlimited
-          (b, bA) <- 
-            either (error . show) id <$>
-            spawnBroker inter bCfg
+          (b, bA) <-
+            either (error . show) id
+              <$> spawnBroker inter bCfg
           deliver_ b (1 :: Int)
           deliver_ b (2 :: Int)
           deliver_ b (3 :: Int)
@@ -906,8 +907,8 @@ test =
       testCase
         "when an initialisation message without payload for an existant resource\
         \ is received, the message is ignored"
-        $ runSimpleApp $ do
-          cr <- newTVarIO [] :: RIO SimpleApp (TVar [Int])
+        $ runTestApp $ do
+          cr <- newTVarIO []
           cl <- newTVarIO []
           let bCfg =
                 MkBrokerConfig
@@ -919,9 +920,9 @@ test =
                     resourceCleaner = \k _a ->
                       atomically $ modifyTVar cl (k :)
                   }
-          (b, bA) <- 
-            either (error . show) id <$>
-            spawnBroker BlockingUnlimited  bCfg
+          (b, bA) <-
+            either (error . show) id
+              <$> spawnBroker BlockingUnlimited bCfg
           deliver_ b (1 :: Int)
           deliver_ b (1 :: Int)
           deliver_ b (2 :: Int)
@@ -946,7 +947,7 @@ test =
         "when an initialisation message with payload, \
         \ then after the resource creation is done, \
         \ the payload is dispatched to the messageDispatcher"
-        $ runSimpleApp $ do
+        $ runTestApp $ do
           done <- newEmptyMVar
           let bCfg =
                 MkBrokerConfig
@@ -962,9 +963,9 @@ test =
                       return KeepResource,
                     resourceCleaner = \_k _a -> return ()
                   }
-          (b, bA) <- 
-            either (error . show) id <$>
-            spawnBroker BlockingUnlimited  bCfg
+          (b, bA) <-
+            either (error . show) id
+              <$> spawnBroker BlockingUnlimited bCfg
           deliver_ b (1 :: Int)
           deliver_ b (1 :: Int)
           deliver_ b (2 :: Int)
