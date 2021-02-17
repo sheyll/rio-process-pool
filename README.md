@@ -61,6 +61,6 @@ Like the previous benchmark this is a rather long running test
 executed with capped memory so that when space is leaked, it 
 will crash the benchmark.
 
-![Pool Memleak Test Heap Profiling Report](./generated-reports/memleak-test-report/rio-process-pool-memleak-test.svg)
+![Pool Memleak Test Heap Profiling Report](./generated-reports/pool-memleak-test-report/rio-process-pool-memleak-test.svg)
 
-The output is printed into [this log file](./generated-reports/memleak-test-report/test.log).
+The output is printed into [this log file](./generated-reports/pool-memleak-test-report/test.log).
