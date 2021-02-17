@@ -57,7 +57,7 @@ Benchmark memory usage of a very simple `Pool` example.
 A single dispatcher process sends a `Start`, some `Work` and a
 `Stop` message to a `Pool` that spawns and dispatches the message
 
-Like the previous benchmark this is a rather long running test 
+This is a rather long running test,
 executed with capped memory so that when space is leaked, it 
 will crash the benchmark.
 
