@@ -66,35 +66,6 @@ test =
                     fromLeft (error "error expected")
                       <$> waitCatch (poolAsync pool)
                   liftIO $
-                    assertEqual "error expected" (show expectedException) (show e),
-              testCase
-                "when receiving from the pool input throws an exception,\
-                \ the pool exits with that exception"
-                $ runTestApp $ do
-                  let badPoolBox =
-                        MkMockBoxInit
-                          ( return
-                              ( MkMockBox
-                                  ( return
-                                      (OnDeliver (error "unexpected invokation: OnDeliver"))
-                                  )
-                                  (throwIO expectedException)
-                                  (error "unexpected invokation: tryReceive")
-                              )
-                          )
-                          Nothing
-                  pool <-
-                    fromRight (error "failed to start pool")
-                      <$> spawnPool @Int @()
-                        badPoolBox
-                        BlockingUnlimited
-                        MkPoolWorkerCallback
-                          { runPoolWorkerCallback = const (const (return ()))
-                          }
-                  e <-
-                    fromLeft (error "error expected")
-                      <$> waitCatch (poolAsync pool)
-                  liftIO $
                     assertEqual
                       "error expected"
                       (show expectedException)
