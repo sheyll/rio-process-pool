@@ -41,25 +41,13 @@ module RIO.ProcessPool.Broker
   )
 where
 
-import Control.Monad (join, void)
-import Data.Foldable (traverse_)
-import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
-import UnliftIO
-  ( Async,
-    MonadUnliftIO,
-    SomeException,
-    async,
-    asyncWithUnmask,
-    mask_,
-    onException,
-    tryAny,
-    waitCatch,
-  )
+import RIO
 import UnliftIO.MessageBox
   ( IsMessageBox (Input, newInput, receive),
     IsMessageBoxArg (MessageBox, newMessageBox),
   )
+import Control.Concurrent.Async(AsyncCancelled)  
 
 -- | Spawn a broker with a new 'MessageBox',
 --  and return its message 'Input' channel as well as
@@ -74,13 +62,15 @@ import UnliftIO.MessageBox
 -- * @m@ is the base monad
 spawnBroker ::
   forall brokerBoxArg k w' w a m.
-  ( MonadUnliftIO m,
+  ( HasLogFunc m,
     Ord k,
+    Display k,
     IsMessageBoxArg brokerBoxArg
   ) =>
   brokerBoxArg ->
   BrokerConfig k w' w a m ->
-  m
+  RIO
+    m
     ( Either
         SomeException
         ( Input (MessageBox brokerBoxArg) w',
@@ -150,7 +140,7 @@ type Demultiplexer w' k w = w' -> Multiplexed k w
 -- * Type @w@ is the type of incoming, demultiplexed, messages.
 -- * Type @a@ specifies the resource type.
 -- * Type @m@ is the base monad
-type MessageHandler k w a m = k -> w -> a -> m (ResourceUpdate a)
+type MessageHandler k w a m = k -> w -> a -> RIO m (ResourceUpdate a)
 
 -- | This value indicates in what state a worker is in after the
 --  'MessageHandler' action was executed.
@@ -180,6 +170,8 @@ data Multiplexed k w
     -- Silently ignore if no resource for the key exists.
     Dispatch k w
 
+-- deriving stock (Show)
+
 -- | User supplied callback to create and initialize a resource.
 --  (Sync-) Exceptions thrown from this function are caught,
 --  and the broker continues.
@@ -189,7 +181,7 @@ data Multiplexed k w
 -- * @w@ is the type of the demultiplexed messages.
 -- * @a@ specifies the resource type.
 -- * @m@ is the monad of the returned action.
-type ResourceCreator k w a m = k -> Maybe w -> m a
+type ResourceCreator k w a m = k -> Maybe w -> RIO m a
 
 -- | User supplied callback called _with exceptions masked_
 -- when the 'MessageHandler' returns 'RemoveResource'
@@ -201,41 +193,54 @@ type ResourceCreator k w a m = k -> Maybe w -> m a
 --   message
 -- * @a@ specifies the resource type.
 -- * @m@ is the monad of the returned action.
-type ResourceCleaner k a m = k -> a -> m ()
+type ResourceCleaner k a m = k -> a -> RIO m ()
 
 type BrokerState k a = Map k a
 
-{-# NOINLINE  brokerLoop #-}
+{-# NOINLINE brokerLoop #-}
 brokerLoop ::
-  ( MonadUnliftIO m,
+  ( HasLogFunc m,
     Ord k,
+    Display k,
     IsMessageBox msgBox
   ) =>
-  (forall x. m x -> m x) ->
+  (forall x. RIO m x -> RIO m x) ->
   msgBox w' ->
   BrokerConfig k w' w a m ->
   BrokerState k a ->
-  m BrokerResult
+  RIO m BrokerResult
 brokerLoop unmask brokerBox config brokerState =
-  ( ( unmask (receive brokerBox)
+  withException
+    ( unmask (receive brokerBox)
         >>= traverse (tryAny . onIncoming unmask config brokerState)
     )
-      `onException` ( do
-                        -- TODO logError
-                        cleanupAllResources config brokerState
-                    )
-  )
+    ( \(ex :: SomeException) -> do      
+        case fromException ex of
+          Just (_cancelled :: AsyncCancelled) ->
+            logDebug "broker loop: cancelled"
+          _ ->
+            logError
+              ( "broker loop: exception while \
+                \receiving and dispatching messages: "
+                  <> display ex
+              )
+        cleanupAllResources config brokerState
+    )
     >>= maybe
       ( do
-          -- TODO logError
+          logError "broker loop: failed to receive next message"
           cleanupAllResources config brokerState
           return MkBrokerResult
       )
       ( \res -> do
           next <-
             either
-              ( \_err ->
-                  -- TODO logError
+              ( \err -> do
+                  logWarn
+                    ( "broker loop: Handling the last message\
+                      \ caused an exception:"
+                        <> display err
+                    )
                   return brokerState
               )
               return
@@ -243,14 +248,14 @@ brokerLoop unmask brokerBox config brokerState =
           brokerLoop unmask brokerBox config next
       )
 
-{-# NOINLINE  onIncoming #-}
+{-# NOINLINE onIncoming #-}
 onIncoming ::
-  (Ord k, MonadUnliftIO m) =>
-  (forall x. m x -> m x) ->
+  (Ord k, HasLogFunc m, Display k) =>
+  (forall x. RIO m x -> RIO m x) ->
   BrokerConfig k w' w a m ->
   BrokerState k a ->
   w' ->
-  m (BrokerState k a)
+  RIO m (BrokerState k a)
 onIncoming unmask config brokerState w' =
   case demultiplexer config w' of
     Initialize k mw ->
@@ -259,23 +264,31 @@ onIncoming unmask config brokerState w' =
       onDispatch unmask k w config brokerState
 
 onInitialize ::
-  (Ord k, MonadUnliftIO m) =>
-  (forall x. m x -> m x) ->
+  (Ord k, HasLogFunc m, Display k) =>
+  (forall x. RIO m x -> RIO m x) ->
   k ->
   BrokerConfig k w' w a m ->
   BrokerState k a ->
   Maybe w ->
-  m (BrokerState k a)
+  RIO m (BrokerState k a)
 onInitialize unmask k config brokerState mw =
   case Map.lookup k brokerState of
     Just _ -> do
-      -- error "Log Error"
+      logError
+        ( "cannot initialize a new worker, a worker with that ID exists: "
+            <> display k
+        )
       return brokerState
     Nothing ->
       tryAny (unmask (resourceCreator config k mw))
         >>= either
-          ( \_err ->
-              -- TODO logError
+          ( \err -> do
+              logError
+                ( "the resource creator for worker "
+                    <> display k
+                    <> " threw an exception: "
+                    <> display err
+                )
               return brokerState
           )
           ( \res ->
@@ -286,28 +299,44 @@ onInitialize unmask k config brokerState mw =
                     Just w ->
                       onException
                         (onDispatch unmask k w config brokerState1)
-                        (resourceCleaner config k res)
+                        ( do
+                            logError
+                              ( "exception while dispatching the "
+                                  <> "post-initialization message for worker: "
+                                  <> display k
+                              )
+                            resourceCleaner config k res
+                        )
           )
 
 onDispatch ::
-  (Ord k, MonadUnliftIO m) =>
-  (forall x. m x -> m x) ->
+  (Ord k, HasLogFunc m, Display k) =>
+  (forall x. RIO m x -> RIO m x) ->
   k ->
   w ->
   BrokerConfig k w' w a m ->
   BrokerState k a ->
-  m (BrokerState k a)
+  RIO m (BrokerState k a)
 onDispatch unmask k w config brokerState =
   maybe notFound dispatch (Map.lookup k brokerState)
   where
     notFound = do
-      -- TODO "logError"
+      logWarn
+        ( "cannot dispatch message, worker not found: "
+            <> display k
+        )
       return brokerState
     dispatch res =
       tryAny (unmask (messageDispatcher config k w res))
         >>= either
-          ( \_err -> do
-              -- TODO logError
+          ( \err -> do
+
+              logError
+                ( "the message dispatcher callback for worker "
+                    <> display k
+                    <> " threw: "
+                    <> display err
+                )
               cleanupResource
                 k
                 config
@@ -332,10 +361,9 @@ onDispatch unmask k w config brokerState =
           )
 
 cleanupAllResources ::
-  (MonadUnliftIO m) =>
   BrokerConfig k w' w a m ->
   BrokerState k a ->
-  m ()
+  RIO m ()
 cleanupAllResources config brokerState =
   traverse_
     ( uncurry
@@ -344,21 +372,19 @@ cleanupAllResources config brokerState =
     (Map.assocs brokerState)
 
 cleanupResource ::
-  (MonadUnliftIO m, Ord k) =>
+  (Ord k) =>
   k ->
   BrokerConfig k w' w a m ->
   Map k a ->
-  m (Map k a)
+  RIO m (Map k a)
 cleanupResource k config brokerState = do
   traverse_ (tryResourceCleaner config k) (Map.lookup k brokerState)
   return (Map.delete k brokerState)
 
 tryResourceCleaner ::
-  MonadUnliftIO m =>
   BrokerConfig k w' w a m ->
   k ->
   a ->
-  m ()
+  RIO m ()
 tryResourceCleaner config k res = do
-  -- TODO logError
   void $ tryAny (resourceCleaner config k res)

@@ -1,14 +1,11 @@
 module BrokerTest (test) where
 
 import Control.Exception (throw)
-import Control.Monad (void)
 import Data.List (sort)
-import GHC.Stack
+import RIO
+import RIO.ProcessPool.Broker
 import Test.Tasty
 import Test.Tasty.HUnit
-import UnliftIO
-import UnliftIO.Concurrent
-import RIO.ProcessPool.Broker
 import UnliftIO.MessageBox.Class
 import UnliftIO.MessageBox.Unlimited
 import Utils
@@ -43,13 +40,14 @@ test =
         \ the exception is returned in a Left..."
         $ do
           Just (Left a) <-
-            timeout 1000000 $
-              spawnBroker @_ @() @() @() @NoOpArg
-                ( MkMockBoxInit @NoOpBox
-                    (throwIO expectedException)
-                    Nothing
-                )
-                noBrokerConfig
+            runSimpleApp $
+              timeout 1000000 $
+                spawnBroker @_ @Int @() @() @NoOpArg
+                  ( MkMockBoxInit @NoOpBox
+                      (throwIO expectedException)
+                      Nothing
+                  )
+                  noBrokerConfig
           assertEqual
             "exception expected"
             (show (SomeException expectedException))
@@ -59,19 +57,20 @@ test =
         \ the exception is returned in a Left..."
         $ do
           Just (Left a) <-
-            timeout 1000000 $
-              spawnBroker @_ @() @() @() @NoOpArg
-                ( MkMockBoxInit
-                    ( return
-                        ( MkMockBox @NoOpInput
-                            (throwIO expectedException)
-                            (error "unexpected invokation: receive")
-                            (error "unexpected invokation: tryReceive")
-                        )
-                    )
-                    Nothing
-                )
-                noBrokerConfig
+            runSimpleApp $
+              timeout 1000000 $
+                spawnBroker @_ @Int @() @() @NoOpArg
+                  ( MkMockBoxInit
+                      ( return
+                          ( MkMockBox @NoOpInput
+                              (throwIO expectedException)
+                              (error "unexpected invokation: receive")
+                              (error "unexpected invokation: tryReceive")
+                          )
+                      )
+                      Nothing
+                  )
+                  noBrokerConfig
           assertEqual
             "exception expected"
             (show (SomeException expectedException))
@@ -81,22 +80,23 @@ test =
         \ then waiting on the broker will return the exception"
         $ do
           Just (Right (_, a)) <-
-            timeout 1000000 $
-              spawnBroker @_ @() @() @() @NoOpArg
-                ( MkMockBoxInit
-                    ( return
-                        ( MkMockBox
-                            ( return
-                                (OnDeliver (error "unexpected invokation: OnDeliver"))
-                            )
-                            (throwIO expectedException)
-                            (error "unexpected invokation: tryReceive")
-                        )
-                    )
-                    Nothing
-                )
-                noBrokerConfig
-          r <- waitCatch a
+            runSimpleApp $
+              timeout 1000000 $
+                spawnBroker @_ @Int @() @() @NoOpArg
+                  ( MkMockBoxInit
+                      ( return
+                          ( MkMockBox
+                              ( return
+                                  (OnDeliver (error "unexpected invokation: OnDeliver"))
+                              )
+                              (throwIO expectedException)
+                              (error "unexpected invokation: tryReceive")
+                          )
+                      )
+                      Nothing
+                  )
+                  noBrokerConfig
+          r <- runSimpleApp $ waitCatch a
           assertEqual
             "exception expected"
             ( show
@@ -108,8 +108,8 @@ test =
       testCase
         "when evaluation of an incoming message causes an exception,\
         \ then the broker ignores the error and continues"
-        $ do
-          (Right (brokerIn, brokerA)) <-
+        $ runSimpleApp $ do
+          spRes <-
             spawnBroker
               ( MkMockBoxInit
                   ( return
@@ -124,7 +124,7 @@ test =
                   Nothing
               )
               ( MkBrokerConfig
-                  { demultiplexer = Dispatch (),
+                  { demultiplexer = Dispatch (777 :: Int),
                     messageDispatcher =
                       const (error "unexpected invokation: messageDispatcher"),
                     resourceCreator =
@@ -133,89 +133,99 @@ test =
                       const (error "unexpected invokation: resourceCleaner")
                   }
               )
-          deliver_ brokerIn ()
-          cancel brokerA
-          r <- waitCatch brokerA
-          assertEqual
-            "exception expected"
-            "Left AsyncCancelled"
-            (show r),
+          case spRes of
+            Left err -> error (show err)
+            Right (brokerIn, brokerA) -> do
+              deliver_ brokerIn ()
+              cancel brokerA
+              r <- waitCatch brokerA
+              liftIO $
+                assertEqual
+                  "exception expected"
+                  "Left AsyncCancelled"
+                  (show r),
       testCase
         "when evaluation of the first incoming message causes an async\
         \ exception, then the broker exits with that exception"
-        $ do
-          (Right (brokerIn, brokerA)) <-
-            spawnBroker
-              ( MkMockBoxInit
-                  ( return
-                      ( MkMockBox
-                          ( return
-                              (OnDeliver (const (pure True)))
-                          )
-                          (return (Just (throw (AsyncExceptionWrapper expectedException))))
-                          (error "unexpected invokation: tryReceive")
-                      )
-                  )
-                  Nothing
-              )
-              ( MkBrokerConfig
-                  { demultiplexer = Dispatch (),
-                    messageDispatcher =
-                      const (error "unexpected invokation: messageDispatcher"),
-                    resourceCreator =
-                      const (error "unexpected invokation: resourceCreator"),
-                    resourceCleaner =
-                      const (error "unexpected invokation: resourceCleaner")
-                  }
-              )
-          deliver_ brokerIn ()
-          r <- waitCatch brokerA
-          assertEqual
-            "exception expected"
-            ( show
-                ( Left (SomeException (AsyncExceptionWrapper expectedException)) ::
-                    Either SomeException ()
+        $ runSimpleApp $ do
+          spawnBroker
+            ( MkMockBoxInit
+                ( return
+                    ( MkMockBox
+                        ( return
+                            (OnDeliver (const (pure True)))
+                        )
+                        (return (Just (throw (AsyncExceptionWrapper expectedException))))
+                        (error "unexpected invokation: tryReceive")
+                    )
                 )
+                Nothing
             )
-            (show r),
+            ( MkBrokerConfig
+                { demultiplexer = Dispatch (777 :: Int),
+                  messageDispatcher =
+                    const (error "unexpected invokation: messageDispatcher"),
+                  resourceCreator =
+                    const (error "unexpected invokation: resourceCreator"),
+                  resourceCleaner =
+                    const (error "unexpected invokation: resourceCleaner")
+                }
+            )
+            >>= \case
+              Left err -> error (show err)
+              Right (brokerIn, brokerA) -> do
+                deliver_ brokerIn ()
+                r <- waitCatch brokerA
+                liftIO $
+                  assertEqual
+                    "exception expected"
+                    ( show
+                        ( Left (SomeException (AsyncExceptionWrapper expectedException)) ::
+                            Either SomeException ()
+                        )
+                    )
+                    (show r),
       testCase
         "when a broker is cancelled while waiting for the first message,\
         \ then the broker exits with AsyncCancelled"
-        $ do
+        $ runSimpleApp $ do
           goOn <- newEmptyMVar
-          (Right (_brokerIn, brokerA)) <-
-            spawnBroker @_ @() @() @()
-              ( MkMockBoxInit
-                  ( return
-                      ( MkMockBox
-                          ( return
-                              (OnDeliver (const (pure True)))
-                          )
-                          ( do
-                              putMVar goOn ()
-                              threadDelay 1_000_000
-                              return (Just (error "unexpected evaluation"))
-                          )
-                          (error "unexpected invokation: tryReceive")
-                      )
-                  )
-                  Nothing
-              )
-              noBrokerConfig
-          takeMVar goOn
-          cancel brokerA
-          r <- waitCatch brokerA
-          assertEqual
-            "exception expected"
-            "Left AsyncCancelled"
-            (show r),
+          spawnBroker @_ @Int @() @()
+            ( MkMockBoxInit
+                ( return
+                    ( MkMockBox
+                        ( return
+                            (OnDeliver (const (pure True)))
+                        )
+                        ( do
+                            putMVar goOn ()
+                            threadDelay 1_000_000
+                            return (Just (error "unexpected evaluation"))
+                        )
+                        (error "unexpected invokation: tryReceive")
+                    )
+                )
+                Nothing
+            )
+            noBrokerConfig
+            >>= \case
+              Left err -> error (show err)
+              Right (_brokerIn, brokerA) -> do
+                takeMVar goOn
+                cancel brokerA
+                r <- waitCatch brokerA
+                liftIO $
+                  assertEqual
+                    "exception expected"
+                    "Left AsyncCancelled"
+                    (show r),
       testCase
         "when a broker receives a message for a missing resource,\
         \ it silently drops the message"
-        $ do
+        $ runSimpleApp $ do
           let brokerCfg =
                 MkBrokerConfig
-                  { demultiplexer = Dispatch (),
+                  { demultiplexer = Dispatch (777 :: Int),
                     messageDispatcher =
                       const (error "unexpected invokation: messageDispatcher"),
                     resourceCreator =
@@ -223,29 +233,32 @@ test =
                     resourceCleaner =
                       const (error "unexpected invokation: resourceCleaner")
                   }
-          (Right (brokerIn, brokerA)) <-
-            spawnBroker BlockingUnlimited brokerCfg
-          deliver_ brokerIn ()
-          cancel brokerA
-          r <- waitCatch brokerA
-          assertEqual
-            "success expected"
-            "Left AsyncCancelled"
-            (show r),
+          spawnBroker BlockingUnlimited brokerCfg
+            >>= \case
+              Left err -> error (show err)
+              Right (brokerIn, brokerA) -> do
+                deliver_ brokerIn ()
+                cancel brokerA
+                r <- waitCatch brokerA
+                liftIO $
+                  assertEqual
+                    "success expected"
+                    "Left AsyncCancelled"
+                    (show r),
       testCase
         "when an empty broker receives a start message without payload\
         \ and the creator callback throws an exception,\
         \ a normal message for that key will be ignored,\
         \ no cleanup is performed, and the broker lives on"
-        $ do
+        $ runSimpleApp $ do
           workerInitialized <- newEmptyMVar
           let brokerCfg =
                 MkBrokerConfig
                   { demultiplexer =
                       \m ->
                         if m
-                          then Initialize () Nothing
-                          else Dispatch () (),
+                          then Initialize (777 :: Int) Nothing
+                          else Dispatch (777 :: Int) (),
                     messageDispatcher =
                       const (error "unexpected invokation: messageDispatcher"),
                     resourceCreator = \_k _mw -> do
@@ -254,37 +267,41 @@ test =
                     resourceCleaner =
                       const (error "unexpected invokation: resourceCleaner")
                   }
-          (Right (brokerIn, brokerA)) <-
-            spawnBroker BlockingUnlimited brokerCfg
-          deliver_ brokerIn True
-          timeout 1000000 (takeMVar workerInitialized)
-            >>= assertEqual
-              "resourceCreator wasn't executed"
-              (Just ())
-          deliver_ brokerIn False
-          cancel brokerA
-          r <- waitCatch brokerA
-          assertEqual
-            "exception expected"
-            "Left AsyncCancelled"
-            (show r),
+          spawnBroker BlockingUnlimited brokerCfg
+            >>= \case
+              Left err -> error (show err)
+              Right (brokerIn, brokerA) -> do
+                deliver_ brokerIn True
+                timeout 1000000 (takeMVar workerInitialized)
+                  >>= liftIO
+                    . assertEqual
+                      "resourceCreator wasn't executed"
+                      (Just ())
+                deliver_ brokerIn False
+                cancel brokerA
+                r <- waitCatch brokerA
+                liftIO $
+                  assertEqual
+                    "exception expected"
+                    "Left AsyncCancelled"
+                    (show r),
       testCase
         "when an empty broker receives a start message with a payload\
         \ and when the MessageHandler callback throws an exception when\
         \ applied to that payload, cleanup is performed once, and\
         \ incoming messages for that key will be ignored,\
         \ and the broker lives on"
-        $ do
+        $ runSimpleApp $ do
           cleanupCalls <- newEmptyMVar
           let brokerCfg =
                 MkBrokerConfig
                   { demultiplexer =
                       \isInitPayload ->
                         if isInitPayload
-                          then Initialize () (Just True)
-                          else Dispatch () False,
+                          then Initialize (777 :: Int) (Just True)
+                          else Dispatch (777 :: Int) False,
                     messageDispatcher =
-                      \() isInitPayload _ ->
+                      \_k isInitPayload _ ->
                         if isInitPayload
                           then throwIO expectedException
                           else error "unexpected invokation: messageDispatcher",
@@ -292,33 +309,34 @@ test =
                       putMVar cleanupCalls (0 :: Int)
                       return (),
                     resourceCleaner =
-                      \() () ->
+                      \_k () ->
                         modifyMVar
                           cleanupCalls
                           (\cnt -> return (cnt + 1, ()))
                   }
-          (Right (brokerIn, brokerA)) <-
+          (brokerIn, brokerA) <- 
+            either (error . show) id <$>
             spawnBroker BlockingUnlimited brokerCfg
           deliver_ brokerIn True
           deliver_ brokerIn False
           threadDelay 10_000
           cancel brokerA
           r <- waitCatch brokerA
-          assertEqual
-            "exception expected"
-            "Left AsyncCancelled"
-            (show r)
+          liftIO $
+            assertEqual
+              "exception expected"
+              "Left AsyncCancelled"
+              (show r)
           takeMVar cleanupCalls
-            >>= assertEqual "resourceCleaner wasn't executed" 1
+            >>= liftIO . assertEqual "resourceCleaner wasn't executed" 1
           -- prevent GC of msg box input:
           deliver_ brokerIn False,
       testCase
         "when 3 resources are initialized and then the broker is cancelled,\
         \ cleanup is performed foreach resource."
-        $ do
+        $ runSimpleApp $ do
           resourceCreated <- newEmptyMVar
           cleanupCalled <- newTVarIO []
-
           let brokerCfg =
                 MkBrokerConfig
                   { demultiplexer = \k -> Initialize k (Just k),
@@ -340,22 +358,30 @@ test =
                       \k a ->
                         atomically (modifyTVar cleanupCalled ((k, a) :))
                   }
-          (Right (brokerIn, brokerA)) <-
+          (brokerIn, brokerA) <- 
+            either (error . show) id <$>
             spawnBroker BlockingUnlimited brokerCfg
           deliver_ brokerIn (1 :: Int)
           deliver_ brokerIn 2
           deliver_ brokerIn 3
-          takeMVar resourceCreated >>= assertEqual "invalid resource created" 1
-          takeMVar resourceCreated >>= assertEqual "invalid resource created" 2
-          takeMVar resourceCreated >>= assertEqual "invalid resource created" 3
+          takeMVar resourceCreated
+            >>= liftIO . assertEqual "invalid resource created" 1
+          takeMVar resourceCreated
+            >>= liftIO . assertEqual "invalid resource created" 2
+          takeMVar resourceCreated
+            >>= liftIO . assertEqual "invalid resource created" 3
           cancel brokerA
           r <- waitCatch brokerA
-          assertEqual
-            "exception expected"
-            "Left AsyncCancelled"
-            (show r)
+          liftIO $
+            assertEqual
+              "exception expected"
+              "Left AsyncCancelled"
+              (show r)
           readTVarIO cleanupCalled
-            >>= assertEqual "resourceCleaner wasn't executed" [(1, 1), (2, 2), (3, 3)]
+            >>= liftIO
+              . assertEqual
+                "resourceCleaner wasn't executed"
+                [(1, 1), (2, 2), (3, 3)]
               . sort
           -- prevent GC of msg box input:
           deliver_ brokerIn 666,
@@ -363,7 +389,7 @@ test =
         "when 3 resources are initialized and then the broker is cancelled,\
         \ cleanup is performed foreach resource, even if exceptions are thrown\
         \ from the cleanup callbacks"
-        $ do
+        $ runSimpleApp $ do
           resourceCreated <- newEmptyMVar
           cleanupCalled <- newTVarIO []
           let brokerCfg =
@@ -388,24 +414,30 @@ test =
                         atomically (modifyTVar cleanupCalled ((k, a) :))
                         throwIO expectedException
                   }
-          (Right (brokerIn, brokerA)) <-
+          (brokerIn, brokerA) <- 
+            either (error . show) id <$>
             spawnBroker BlockingUnlimited brokerCfg
           deliver_ brokerIn (1 :: Int)
           deliver_ brokerIn 2
           deliver_ brokerIn 3
-          takeMVar resourceCreated >>= assertEqual "invalid resource created" 1
-          takeMVar resourceCreated >>= assertEqual "invalid resource created" 2
-          takeMVar resourceCreated >>= assertEqual "invalid resource created" 3
+          takeMVar resourceCreated
+            >>= liftIO . assertEqual "invalid resource created" 1
+          takeMVar resourceCreated
+            >>= liftIO . assertEqual "invalid resource created" 2
+          takeMVar resourceCreated
+            >>= liftIO . assertEqual "invalid resource created" 3
           cancel brokerA
           r <- waitCatch brokerA
-          assertEqual
-            "exception expected"
-            "Left AsyncCancelled"
-            (show r)
+          liftIO $
+            assertEqual
+              "exception expected"
+              "Left AsyncCancelled"
+              (show r)
           readTVarIO cleanupCalled
-            >>= assertEqual
-              "resourceCleaner wasn't executed"
-              [(1, 1), (2, 2), (3, 3)]
+            >>= liftIO
+              . assertEqual
+                "resourceCleaner wasn't executed"
+                [(1, 1), (2, 2), (3, 3)]
               . sort
           -- prevent GC of msg box input:
           deliver_ brokerIn 666,
@@ -414,7 +446,7 @@ test =
         \ while adding a 3rd an async exception is thrown\
         \ when handling the initial message,\
         \ then the broker cleans up the 3 resources and exists"
-        $ do
+        $ runSimpleApp $ do
           resourceCreated <- newEmptyMVar
           cleanupCalled <- newTVarIO []
           let brokerCfg =
@@ -429,25 +461,31 @@ test =
                       \k a -> do
                         atomically (modifyTVar cleanupCalled ((k, a) :))
                   }
-          (Right (brokerIn, brokerA)) <-
+          (brokerIn, brokerA) <- 
+            either (error . show) id <$>
             spawnBroker BlockingUnlimited brokerCfg
           deliver_ brokerIn (1 :: Int)
           deliver_ brokerIn 2
           deliver_ brokerIn 3
-          takeMVar resourceCreated >>= assertEqual "invalid resource created" 1
-          takeMVar resourceCreated >>= assertEqual "invalid resource created" 2
-          takeMVar resourceCreated >>= assertEqual "invalid resource created" 3
+          takeMVar resourceCreated
+            >>= liftIO . assertEqual "invalid resource created" 1
+          takeMVar resourceCreated
+            >>= liftIO . assertEqual "invalid resource created" 2
+          takeMVar resourceCreated
+            >>= liftIO . assertEqual "invalid resource created" 3
           throwTo (asyncThreadId brokerA) expectedException
-          Left r <- waitCatch brokerA
+          r <- either id (error . show) <$> waitCatch brokerA
           readTVarIO cleanupCalled
-            >>= assertEqual
-              "resourceCleaner wasn't executed"
-              [(1, 1), (2, 2), (3, 3)]
+            >>= liftIO
+              . assertEqual
+                "resourceCleaner wasn't executed"
+                [(1, 1), (2, 2), (3, 3)]
               . sort
-          assertEqual
-            "exception expected"
-            (show expectedException)
-            (show r)
+          liftIO $
+            assertEqual
+              "exception expected"
+              (show expectedException)
+              (show r)
           -- prevent GC of msg box input:
           deliver_ brokerIn 666,
       testCase
@@ -455,12 +493,12 @@ test =
         \ when the messageHandler returns KeepResource,\
         \ then the resource returned from the create callback is passed to\
         \ the cleanup function"
-        $ do
+        $ runSimpleApp $ do
           resourceCreated <- newEmptyMVar
           cleanupCalled <- newEmptyTMVarIO
           let brokerCfg =
                 MkBrokerConfig
-                  { demultiplexer = \_k -> Initialize () (Just ()),
+                  { demultiplexer = \_k -> Initialize (777 :: Int) (Just ()),
                     messageDispatcher = \_k _w a -> do
                       putMVar resourceCreated a
                       return KeepResource,
@@ -472,33 +510,37 @@ test =
                   }
               initialResource :: Int
               initialResource = 123
-          (Right (brokerIn, brokerA)) <-
+          (brokerIn, brokerA) <- 
+            either (error . show) id <$>
             spawnBroker BlockingUnlimited brokerCfg
           deliver_ brokerIn (1 :: Int)
           takeMVar resourceCreated
-            >>= assertEqual "invalid resource created" initialResource
+            >>= liftIO
+              . assertEqual "invalid resource created" initialResource
           cancel brokerA
-          Left r <- waitCatch brokerA
-          assertEqual
-            "exception expected"
-            "AsyncCancelled"
-            (show r)
+          r <- either id (error . show) <$> waitCatch brokerA
+          liftIO $
+            assertEqual
+              "exception expected"
+              "AsyncCancelled"
+              (show r)
           atomically (takeTMVar cleanupCalled)
-            >>= assertEqual
-              "resourceCleaner wasn't executed"
-              initialResource
+            >>= liftIO
+              . assertEqual
+                "resourceCleaner wasn't executed"
+                initialResource
           -- prevent GC of msg box input:
           deliver_ brokerIn 666,
       testCase
         "when adding a new resource with an extra initial message,\
         \ when the messageHandler returns (UpdateResource x),\
         \ then x is passed to the cleanup function"
-        $ do
+        $ runSimpleApp $ do
           resourceCreated <- newEmptyMVar
           cleanupCalled <- newEmptyTMVarIO
           let brokerCfg =
                 MkBrokerConfig
-                  { demultiplexer = \_k -> Initialize () (Just ()),
+                  { demultiplexer = \_k -> Initialize (787 :: Int) (Just ()),
                     messageDispatcher = \_k _w a -> do
                       void $ async (threadDelay 100000 >> putMVar resourceCreated a)
                       return (UpdateResource x),
@@ -511,34 +553,40 @@ test =
               initialResource = 123
               x :: Int
               x = 234
-          (Right (brokerIn, brokerA)) <-
+          (brokerIn, brokerA) <- 
+            either (error . show) id <$>
             spawnBroker BlockingUnlimited brokerCfg
           deliver_ brokerIn (1 :: Int)
           takeMVar resourceCreated
-            >>= assertEqual "invalid resource created" initialResource
+            >>= liftIO
+              . assertEqual
+                "invalid resource created"
+                initialResource
           cancel brokerA
-          Left r <- waitCatch brokerA
-          assertEqual
-            "exception expected"
-            "AsyncCancelled"
-            (show r)
+          r <- either id (error . show) <$> waitCatch brokerA
+          liftIO $
+            assertEqual
+              "exception expected"
+              "AsyncCancelled"
+              (show r)
           atomically (takeTMVar cleanupCalled)
-            >>= assertEqual
-              "resourceCleaner wasn't executed"
-              x
+            >>= liftIO
+              . assertEqual
+                "resourceCleaner wasn't executed"
+                x
           -- prevent GC of msg box input:
           deliver_ brokerIn 666,
       testCase
         "when adding a new resource with an extra initial message,\
         \ when the messageHandler returns (RemoveResource Nothing),\
         \ then the initial resource is passed to the cleanup function"
-        $ do
+        $ runSimpleApp $ do
           resourceCreated <- newEmptyMVar
           readyForCleanup <- newEmptyMVar
           cleanupCalled <- newEmptyTMVarIO
           let brokerCfg =
                 MkBrokerConfig
-                  { demultiplexer = \_k -> Initialize () (Just ()),
+                  { demultiplexer = \_k -> Initialize (787 :: Int) (Just ()),
                     messageDispatcher = \_k _w a -> do
                       void . async $ do
                         () <- takeMVar readyForCleanup
@@ -553,34 +601,40 @@ test =
                   }
               initialResource :: Int
               initialResource = 123
-          (Right (brokerIn, brokerA)) <-
+          (brokerIn, brokerA) <- 
+            either (error . show) id <$>
             spawnBroker BlockingUnlimited brokerCfg
           deliver_ brokerIn (1 :: Int)
           takeMVar resourceCreated
-            >>= assertEqual "invalid resource created" initialResource
+            >>= liftIO
+              . assertEqual
+                "invalid resource created"
+                initialResource
           cancel brokerA
-          Left r <- waitCatch brokerA
-          assertEqual
-            "exception expected"
-            "AsyncCancelled"
-            (show r)
+          r <- either id (error . show) <$> waitCatch brokerA
+          liftIO $
+            assertEqual
+              "exception expected"
+              "AsyncCancelled"
+              (show r)
           atomically (takeTMVar cleanupCalled)
-            >>= assertEqual
-              "resourceCleaner wasn't executed"
-              initialResource
+            >>= liftIO
+              . assertEqual
+                "resourceCleaner wasn't executed"
+                initialResource
           -- prevent GC of msg box input:
           deliver_ brokerIn 666,
       testCase
         "when adding a new resource with an extra initial message,\
         \ when the messageHandler returns (RemoveResource (Just x)),\
         \ then x is passed to the cleanup function"
-        $ do
+        $ runSimpleApp $ do
           resourceCreated <- newEmptyMVar
           readyForCleanup <- newEmptyMVar
           cleanupCalled <- newEmptyTMVarIO
           let brokerCfg =
                 MkBrokerConfig
-                  { demultiplexer = \_k -> Initialize () (Just ()),
+                  { demultiplexer = \_k -> Initialize (787 :: Int) (Just ()),
                     messageDispatcher = \_k _w a -> do
                       void . async $ do
                         () <- takeMVar readyForCleanup
@@ -597,32 +651,38 @@ test =
               initialResource = 123
               x :: Int
               x = 234
-          (Right (brokerIn, brokerA)) <-
+          (brokerIn, brokerA) <- 
+            either (error . show) id <$>
             spawnBroker BlockingUnlimited brokerCfg
           deliver_ brokerIn (1 :: Int)
           takeMVar resourceCreated
-            >>= assertEqual "invalid resource created" initialResource
+            >>= liftIO
+              . assertEqual
+                "invalid resource created"
+                initialResource
           cancel brokerA
-          Left r <- waitCatch brokerA
-          assertEqual
-            "exception expected"
-            "AsyncCancelled"
-            (show r)
+          r <- either id (error . show) <$> waitCatch brokerA
+          liftIO $
+            assertEqual
+              "exception expected"
+              "AsyncCancelled"
+              (show r)
           atomically (takeTMVar cleanupCalled)
-            >>= assertEqual
-              "resourceCleaner wasn't executed"
-              x
+            >>= liftIO
+              . assertEqual
+                "resourceCleaner wasn't executed"
+                x
           -- prevent GC of msg box input:
           deliver_ brokerIn 666,
       testCase
         "when adding a new resource without an extra initial message,\
         \ then the initial resource is passed to the cleanup function"
-        $ do
+        $ runSimpleApp $ do
           resourceCreated <- newEmptyMVar
           cleanupCalled <- newEmptyTMVarIO
           let brokerCfg =
                 MkBrokerConfig
-                  { demultiplexer = \_k -> Initialize () (Just ()),
+                  { demultiplexer = \_k -> Initialize (787 :: Int) (Just ()),
                     messageDispatcher = \_k _w a -> do
                       void $ async (threadDelay 100000 >> putMVar resourceCreated a)
                       return (UpdateResource x),
@@ -635,28 +695,34 @@ test =
               initialResource = 123
               x :: Int
               x = 234
-          (Right (brokerIn, brokerA)) <-
+          (brokerIn, brokerA) <- 
+            either (error . show) id <$>
             spawnBroker BlockingUnlimited brokerCfg
           deliver_ brokerIn (1 :: Int)
           takeMVar resourceCreated
-            >>= assertEqual "invalid resource created" initialResource
+            >>= liftIO
+              . assertEqual
+                "invalid resource created"
+                initialResource
           cancel brokerA
-          Left r <- waitCatch brokerA
-          assertEqual
-            "exception expected"
-            "AsyncCancelled"
-            (show r)
+          r <- either id (error . show) <$> waitCatch brokerA
+          liftIO $
+            assertEqual
+              "exception expected"
+              "AsyncCancelled"
+              (show r)
           atomically (takeTMVar cleanupCalled)
-            >>= assertEqual
-              "resourceCleaner wasn't executed"
-              x
+            >>= liftIO
+              . assertEqual
+                "resourceCleaner wasn't executed"
+                x
           -- prevent GC of msg box input:
           deliver_ brokerIn 666,
       testCase
         "on a broker with two resources a and b with keys 1 and 2,\
         \ for an incoming message with key=1 the MessageDispatcher is\
         \ called with resource a and for key=2 with resource b"
-        $ do
+        $ runSimpleApp $ do
           messageDispatched <- newEmptyMVar
           cleanupCalled <- newTVarIO []
           let brokerCfg =
@@ -674,34 +740,39 @@ test =
                       \k a -> do
                         atomically (modifyTVar cleanupCalled ((k, a) :))
                   }
-          (Right (brokerIn, brokerA)) <-
+          (brokerIn, brokerA) <- 
+            either (error . show) id <$>
             spawnBroker BlockingUnlimited brokerCfg
           deliver_ brokerIn (1 :: Int, True)
           deliver_ brokerIn (2, True)
           deliver_ brokerIn (1, False)
           deliver_ brokerIn (2, False)
           takeMVar messageDispatched
-            >>= assertEqual "invalid resource" (1, 1)
+            >>= liftIO
+              . assertEqual "invalid resource" (1, 1)
           takeMVar messageDispatched
-            >>= assertEqual "invalid resource" (2, 2)
+            >>= liftIO
+              . assertEqual "invalid resource" (2, 2)
           throwTo (asyncThreadId brokerA) expectedException
-          Left r <- waitCatch brokerA
+          r <- either id (error . show) <$> waitCatch brokerA
           readTVarIO cleanupCalled
-            >>= assertEqual
-              "resourceCleaner wasn't executed"
-              [(1, 1), (2, 2)]
+            >>= liftIO
+              . assertEqual
+                "resourceCleaner wasn't executed"
+                [(1, 1), (2, 2)]
               . sort
-          assertEqual
-            "exception expected"
-            (show expectedException)
-            (show r)
+          liftIO $
+            assertEqual
+              "exception expected"
+              (show expectedException)
+              (show r)
           -- prevent GC of msg box input:
           deliver_ brokerIn (666, False),
       testCase
         "When the MessageDispatcher is called with resource x and \
         \ returns (UpdateResource y), then next time it is called with\
         \ resource y"
-        $ do
+        $ runSimpleApp $ do
           messageDispatched <- newEmptyMVar
           let x :: Int
               x = 42
@@ -710,8 +781,8 @@ test =
                 MkBrokerConfig
                   { demultiplexer = \isInit ->
                       if isInit
-                        then Initialize () Nothing
-                        else Dispatch () (),
+                        then Initialize (787 :: Int) Nothing
+                        else Dispatch (787 :: Int) (),
                     resourceCreator = \_k _mw ->
                       return x,
                     messageDispatcher = \_k _w a -> do
@@ -720,29 +791,31 @@ test =
                     resourceCleaner = \_k _a ->
                       return ()
                   }
-          (Right (brokerIn, brokerA)) <-
+          (brokerIn, brokerA) <- 
+            either (error . show) id <$>
             spawnBroker BlockingUnlimited brokerCfg
           deliver_ brokerIn True
           deliver_ brokerIn False
           deliver_ brokerIn False
           takeMVar messageDispatched
-            >>= assertEqual "invalid resource" x
+            >>= liftIO . assertEqual "invalid resource" x
           takeMVar messageDispatched
-            >>= assertEqual "invalid resource" y
+            >>= liftIO . assertEqual "invalid resource" y
           cancel brokerA
-          Left r <- waitCatch brokerA
-          assertEqual
-            "exception expected"
-            "AsyncCancelled"
-            (show r)
+          r <- either id (error . show) <$> waitCatch brokerA
+          liftIO $
+            assertEqual
+              "exception expected"
+              "AsyncCancelled"
+              (show r)
           -- prevent GC of msg box input:
           deliver_ brokerIn False,
       testCase
         "when the receive function throws a synchronous exception x,\
         \ then all resources will be cleaned up and\
         \ the broker will re-throw x"
-        $ do
-          cr <- newTVarIO [] :: IO (TVar [Int])
+        $ runSimpleApp $ do
+          cr <- newTVarIO [] :: RIO SimpleApp (TVar [Int])
           cl <- newTVarIO []
           let bCfg =
                 MkBrokerConfig
@@ -766,26 +839,32 @@ test =
                   )
                   (MkInterceptor (return Nothing))
                   BlockingUnlimited
-          Right (b, bA) <- spawnBroker inter bCfg
+          (b, bA) <- 
+            either (error . show) id <$>
+            spawnBroker inter bCfg
           deliver_ b (1 :: Int)
           deliver_ b (2 :: Int)
           deliver_ b (3 :: Int)
           deliver_ b (4 :: Int)
-          Left ex <- waitCatch bA
-          assertEqual
-            "exception expected"
-            (show expectedException)
-            (show ex)
+          ex <- either id (error . show) <$> waitCatch bA
+          liftIO $
+            assertEqual
+              "exception expected"
+              (show expectedException)
+              (show ex)
           readTVarIO cl
-            >>= assertEqual "all resources must be cleaned" [3, 2, 1]
+            >>= liftIO
+              . assertEqual
+                "all resources must be cleaned"
+                [3, 2, 1]
           -- prevent GC of msg box input:
           deliver_ b 666,
       testCase
         "when the receive function returns Nothing,\
         \ then all resources will be cleaned up and\
         \ the broker will exit."
-        $ do
-          cr <- newTVarIO [] :: IO (TVar [Int])
+        $ runSimpleApp $ do
+          cr <- newTVarIO [] :: RIO SimpleApp (TVar [Int])
           cl <- newTVarIO []
           let bCfg =
                 MkBrokerConfig
@@ -809,22 +888,26 @@ test =
                   )
                   (MkInterceptor (return Nothing))
                   BlockingUnlimited
-          Right (b, bA) <- spawnBroker inter bCfg
+          (b, bA) <- 
+            either (error . show) id <$>
+            spawnBroker inter bCfg
           deliver_ b (1 :: Int)
           deliver_ b (2 :: Int)
           deliver_ b (3 :: Int)
           deliver_ b (4 :: Int)
           wait bA
-            >>= assertEqual "exit expected" MkBrokerResult
+            >>= liftIO
+              . assertEqual "exit expected" MkBrokerResult
           readTVarIO cl
-            >>= assertEqual "all resources must be cleaned" [3, 2, 1]
+            >>= liftIO
+              . assertEqual "all resources must be cleaned" [3, 2, 1]
           -- prevent GC of msg box input:
           deliver_ b 666,
       testCase
         "when an initialisation message without payload for an existant resource\
         \ is received, the message is ignored"
-        $ do
-          cr <- newTVarIO [] :: IO (TVar [Int])
+        $ runSimpleApp $ do
+          cr <- newTVarIO [] :: RIO SimpleApp (TVar [Int])
           cl <- newTVarIO []
           let bCfg =
                 MkBrokerConfig
@@ -836,7 +919,9 @@ test =
                     resourceCleaner = \k _a ->
                       atomically $ modifyTVar cl (k :)
                   }
-          Right (b, bA) <- spawnBroker BlockingUnlimited bCfg
+          (b, bA) <- 
+            either (error . show) id <$>
+            spawnBroker BlockingUnlimited  bCfg
           deliver_ b (1 :: Int)
           deliver_ b (1 :: Int)
           deliver_ b (2 :: Int)
@@ -845,16 +930,23 @@ test =
             checkSTM (crs == [2, 1])
           cancel bA
           waitCatch bA
-            >>= assertEqual "exit expected" "Left AsyncCancelled" . show
+            >>= liftIO
+              . assertEqual
+                "exit expected"
+                "Left AsyncCancelled"
+              . show
           readTVarIO cl
-            >>= assertEqual "all resources must be cleaned" [2, 1]
+            >>= liftIO
+              . assertEqual
+                "all resources must be cleaned"
+                [2, 1]
           -- prevent GC of msg box input:
           deliver_ b 666,
       testCase
         "when an initialisation message with payload, \
         \ then after the resource creation is done, \
         \ the payload is dispatched to the messageDispatcher"
-        $ do
+        $ runSimpleApp $ do
           done <- newEmptyMVar
           let bCfg =
                 MkBrokerConfig
@@ -870,14 +962,18 @@ test =
                       return KeepResource,
                     resourceCleaner = \_k _a -> return ()
                   }
-          Right (b, bA) <- spawnBroker BlockingUnlimited bCfg
+          (b, bA) <- 
+            either (error . show) id <$>
+            spawnBroker BlockingUnlimited  bCfg
           deliver_ b (1 :: Int)
           deliver_ b (1 :: Int)
           deliver_ b (2 :: Int)
           takeMVar done
           cancel bA
           waitCatch bA
-            >>= assertEqual "exit expected" "Left AsyncCancelled" . show
+            >>= liftIO
+              . assertEqual "exit expected" "Left AsyncCancelled"
+              . show
           -- prevent GC of msg box input:
           deliver_ b 666
     ]

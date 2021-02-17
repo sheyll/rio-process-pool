@@ -1,4 +1,4 @@
 { withProfiling ? false
 }:
-(import ./default.nix { inherit withProfiling; }).unliftio-messagebox.components.exes.unliftio-pool-memleak-test
+(import ./default.nix { inherit withProfiling; }).rio-process-pool.components.exes.rio-process-pool-memleak-test
 

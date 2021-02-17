@@ -20,23 +20,7 @@ module RIO.ProcessPool.Pool
   )
 where
 
-import Control.Monad (void)
-import Data.Foldable (traverse_)
-import UnliftIO
-  ( Async,
-    MVar,
-    MonadUnliftIO,
-    SomeException,
-    async,
-    cancel,
-    finally,
-    newEmptyMVar,
-    onException,
-    putMVar,
-    takeMVar,
-    tryReadMVar, liftIO,
-   stringException, throwIO
-  )
+import RIO
 import RIO.ProcessPool.Broker
   ( BrokerConfig (MkBrokerConfig),
     BrokerResult,
@@ -77,12 +61,14 @@ spawnPool ::
   ( IsMessageBoxArg poolBox,
     IsMessageBoxArg workerBox,
     Ord k,
-    MonadUnliftIO m
+    Display k,
+    HasLogFunc m
   ) =>
   poolBox ->
   workerBox ->
   PoolWorkerCallback workerBox w k m ->
-  m
+  RIO
+    m
     ( Either
         SomeException
         (Pool poolBox k w)
@@ -112,7 +98,7 @@ removePoolWorkerMessage !k = Dispatch k Nothing
 -- | The function that processes a
 -- 'MessageBox' of a worker for a specific /key/.
 newtype PoolWorkerCallback workerBox w k m = MkPoolWorkerCallback
-  { runPoolWorkerCallback :: k -> MessageBox workerBox w -> m ()
+  { runPoolWorkerCallback :: k -> MessageBox workerBox w -> RIO m ()
   }
 
 -- | A record containing the message box 'Input' of the
@@ -136,12 +122,12 @@ data PoolWorker workerBox w = MkPoolWorker
   }
 
 dispatchToWorker ::
-  (MonadUnliftIO m, IsInput (Input (MessageBox b))) =>
+  (HasLogFunc m, IsInput (Input (MessageBox b)), Display k) =>
   k ->
   Maybe w ->
   PoolWorker b w ->
-  m (ResourceUpdate (PoolWorker b w))
-dispatchToWorker _k pMsg pm =
+  RIO m (ResourceUpdate (PoolWorker b w))
+dispatchToWorker k pMsg pm =
   case pMsg of
     Just w -> helper w
     Nothing -> return (RemoveResource Nothing)
@@ -149,21 +135,24 @@ dispatchToWorker _k pMsg pm =
     helper msg = do
       ok <- deliver (poolWorkerIn pm) msg
       if not ok
-        then return (RemoveResource Nothing)
+        then do
+          logError ("failed to deliver message to pool worker: " <> display k)
+          return (RemoveResource Nothing)
         else return KeepResource
 
 spawnWorker ::
   forall k w poolBoxIn workerBox m.
   ( IsMessageBoxArg workerBox,
-    MonadUnliftIO m,
-    IsInput poolBoxIn
+    HasLogFunc m,
+    IsInput poolBoxIn,
+    Display k
   ) =>
   workerBox ->
   MVar (poolBoxIn (Multiplexed k (Maybe w))) ->
   PoolWorkerCallback workerBox w k m ->
   k ->
   Maybe (Maybe w) ->
-  m (PoolWorker workerBox w)
+  RIO m (PoolWorker workerBox w)
 spawnWorker workerBox brInRef pmCb this _mw = do
   inputRef <- newEmptyMVar
   a <- async (go inputRef `finally` enqueueCleanup)
@@ -176,14 +165,23 @@ spawnWorker workerBox brInRef pmCb this _mw = do
       return MkPoolWorker {poolWorkerIn = boxIn, poolWorkerAsync = a}
   where
     go inputRef = do
-      b <-
-        ( do
-            b <- newMessageBox workerBox
-            boxIn <- newInput b
-            putMVar inputRef (Just boxIn)
-            return b
+      (b, boxIn) <-
+        withException
+          ( do
+              b <- newMessageBox workerBox
+              boxIn <- newInput b
+              return (b, boxIn)
           )
-          `onException` putMVar inputRef Nothing
+          (\(ex :: SomeException) -> do
+              logError
+                ( "failed to create the message box for the new pool worker: "
+                    <> display this
+                    <> " exception caught: "
+                    <> display ex
+                )
+              putMVar inputRef Nothing
+          )
+      putMVar inputRef (Just boxIn)
       runPoolWorkerCallback pmCb this b
     enqueueCleanup =
       tryReadMVar brInRef
@@ -192,10 +190,9 @@ spawnWorker workerBox brInRef pmCb this _mw = do
               void (deliver brIn (removePoolWorkerMessage this))
           )
 
-removeWorker ::
-  (MonadUnliftIO m) =>
+removeWorker ::  
   k ->
   PoolWorker workerBox w ->
-  m ()
+  RIO m ()
 removeWorker _k =
   void . cancel . poolWorkerAsync

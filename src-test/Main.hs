@@ -1,5 +1,6 @@
 module Main (main) where
 
+import RIO
 import qualified BrokerTest
 import qualified PoolTest
 import System.Environment (setEnv)
@@ -10,7 +11,6 @@ import Test.Tasty
     testGroup,
   )
 import Test.Tasty.Runners.Html (htmlRunner)
-import qualified UnlimitedMessageBoxTest
 
 main :: IO ()
 main =

@@ -12,6 +12,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NumericUnderscores #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE StandaloneDeriving #-}
@@ -21,142 +22,151 @@
 
 module Main (main) where
 
-import qualified CommandBenchmark
-import Control.Monad (replicateM, unless)
 import Criterion.Main (defaultMain)
 import Criterion.Types
   ( bench,
     bgroup,
     nfAppIO,
   )
-import Data.Semigroup (Semigroup (stimes))
-import UnliftIO.MessageBox.CatchAll
-  ( CatchAllArg (..),
-  )
-import UnliftIO.MessageBox.Class
-  ( IsInput (..),
-    IsMessageBox (..),
-    IsMessageBoxArg (..),
-    deliver,
-    newInput,
-    receive,
-  )
-import qualified UnliftIO.MessageBox.Limited as L
-import qualified UnliftIO.MessageBox.Unlimited as U
-import UnliftIO (MonadUnliftIO, conc, runConc)
+import RIO
+import RIO.ProcessPool
 
 main =
   defaultMain
-    [ CommandBenchmark.benchmark,
-      bgroup
+    [ bgroup
         "Pool"
         [ bench
-            ( mboxImplTitle <> " "
+            ( "Sending "
                 <> show noMessages
-                <> " "
-                <> show senderNo
-                <> " : "
+                <> " msgs for "
                 <> show receiverNo
+                <> " receivers"
             )
             ( nfAppIO
-                impl
-                (senderNo, noMessages, receiverNo)
+                (runSimpleApp . unidirectionalMessagePassing BlockingUnlimited BlockingUnlimited)
+                (noMessages, receiverNo)
             )
-          | noMessages <- [100_000],
-            (isNonBlocking, mboxImplTitle, impl) <-
-              [ let x = U.BlockingUnlimited
-                 in (False, "Unlimited", unidirectionalMessagePassing mkTestMessage x),
-                let x = CatchAllArg U.BlockingUnlimited
-                 in (False, "CatchUnlimited", unidirectionalMessagePassing mkTestMessage x),
-                -- let x = L.BlockingBoxLimit L.MessageLimit_1
-                --  in (False, show x, unidirectionalMessagePassing mkTestMessage x),
-                -- let x = L.BlockingBoxLimit L.MessageLimit_16
-                --  in (False, show x, unidirectionalMessagePassing mkTestMessage x),
-                -- let x = L.BlockingBoxLimit L.MessageLimit_32
-                --  in (False, show x, unidirectionalMessagePassing mkTestMessage x),
-                -- let x = L.BlockingBoxLimit L.MessageLimit_64
-                --  in (False, show x, unidirectionalMessagePassing mkTestMessage x),
-                -- let x = L.BlockingBoxLimit L.MessageLimit_128
-                --  in (False, show x, unidirectionalMessagePassing mkTestMessage x),
-                let x = L.BlockingBoxLimit L.MessageLimit_256
-                 in (False, "Blocking256", unidirectionalMessagePassing mkTestMessage x),
-                -- ,
-                -- let x = L.BlockingBoxLimit L.MessageLimit_512
-                --  in (False, show x, unidirectionalMessagePassing mkTestMessage x),
-                -- let x = L.BlockingBoxLimit L.MessageLimit_4096
-                --  in (False, show x, unidirectionalMessagePassing mkTestMessage x),
-                let x = L.NonBlockingBoxLimit L.MessageLimit_128
-                  in (True, show x, unidirectionalMessagePassing mkTestMessage x),
-                -- let x = L.WaitingBoxLimit Nothing 5_000_000 L.MessageLimit_128
-                --  in (False, show x, unidirectionalMessagePassing mkTestMessage x),
-                let x = L.WaitingBoxLimit (Just 60_000_000) 5_000_000 L.MessageLimit_256
-                 in (True, "Waiting256", unidirectionalMessagePassing mkTestMessage x)
-                -- let x = CatchAllArg (L.BlockingBoxLimit L.MessageLimit_128)
-                --  in (False, show x, unidirectionalMessagePassing mkTestMessage x)
-              ],
-            (senderNo, receiverNo) <-
-              [ -- (1, 1000),
-                (10, 100),
-                (1, 1),
-                (1000, 1)
-              ],
-            not isNonBlocking || senderNo == 1 && receiverNo > 1
+          | noMessages <- [10,50],
+            receiverNo <- [500, 1000]
         ]
     ]
 
 mkTestMessage :: Int -> TestMessage
 mkTestMessage !i =
   MkTestMessage
-    ( "The not so very very very very very very very very very very very very very very very very very very very very very very very very " ++ show i,
-      "large",
-      "meeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeessssssssssssssssssssssssssssssssss" ++ show i,
-      ( "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "ggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-        even i,
-        123423421111111111111111111123234 * toInteger i
+    ( i,
+      ( "The not so very very very very very very very very very very very very very very very very very very very very very very very very "
+          <> utf8BuilderToText (displayShow (23 * i)),
+        "large",
+        "meeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeessssssssssssssssssssssssssssssssss"
+          <> utf8BuilderToText (displayShow i),
+        ( "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "ggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          even i,
+          123423421111111111111111111123234 * toInteger i
+        )
       )
     )
 
-newtype TestMessage = MkTestMessage (String, String, String, (String, String, Bool, Integer))
+newtype TestMessage = MkTestMessage (Int, (Text, Text, Text, (Text, Text, Bool, Integer)))
   deriving newtype (Show)
 
+instance Display TestMessage where
+  display (MkTestMessage (x, (a, b, c, (d, e, f, g)))) =
+    display x <> display ':'
+      <> display a
+      <> display ' '
+      <> display b
+      <> display ' '
+      <> display c
+      <> display ' '
+      <> display d
+      <> display ' '
+      <> display e
+      <> display ' '
+      <> displayShow f
+      <> display ' '
+      <> display g
+      <> display '.'
+
 unidirectionalMessagePassing ::
-  (MonadUnliftIO m, IsMessageBoxArg cfg) =>
-  (Int -> TestMessage) ->
-  cfg ->
+  (IsMessageBoxArg boxPool, IsMessageBoxArg boxWorker) =>
+  boxPool ->
+  boxWorker ->
   (Int, Int) ->
-  m ()
-unidirectionalMessagePassing !msgGen !impl (!nM, !nC) = do
+  RIO SimpleApp ()
+unidirectionalMessagePassing !boxPool !boxWorker (!nM, !nC) = do
   allStopped <- newEmptyMVar
-  pool <- startPool impl BlockingUnlimited (MkPoolWorkerCallback (consume allStopped nM))
-  producer pool 
-  awaitAllStopped allStopped
-  cancel (poolAsync pool)  
+  logInfo "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ BEGIN ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
+  spawnPool
+    boxPool
+    boxWorker
+    ( MkPoolWorkerCallback
+        ( \k b ->
+            ( do
+                consume k b
+                putMVar allStopped ()
+            )
+              `withException` ( \(e :: SomeException) ->
+                                  logError
+                                    ( "consume threw exception: "
+                                        <> display e
+                                        <> " for worker: "
+                                        <> display k
+                                    )
+                              )
+        )
+    )
+    >>= \case
+      Left err -> error (show err)
+      Right pool -> do
+        forM_ [0..1 :: Int] $ \ !runIndex -> do
+          logInfo "                    ~~~ NEXT ROUND ~~~"
+          producer runIndex pool
+          logInfo "                         ~~ WAITING FOR RESULTS ~~"
+          awaitAllStopped allStopped          
+          -- sendPoison runIndex pool
+
+        cancel (poolAsync pool)
   where
-    producer pool = do 
-      mapM_ 
-        ( \msg@(Dispatch k v) -> do
-            !ok <- deliver (poolInput pool) msg
-            unless ok (error ("producer failed to deliver: " <> show k <> " " <> show v))
-        )
-        ((`Initialize` Nothing) <$> [0 .. cM - 1])
+    producer !runIndex !pool = do
       mapM_
-        ( \msg@(Dispatch k v) -> do
-            !ok <- deliver (poolInput pool) msg
-            unless ok (error ("producer failed to deliver: " <> show k <> " " <> show v))
+        (deliverOrLog pool)
+        ((`Initialize` Nothing) . (+ (nC * runIndex)) <$> [0 .. nC - 1])
+      mapM_
+        (deliverOrLog pool)
+        (Dispatch . (+ (nC * runIndex)) <$> [0 .. nC - 1] <*> (Just . mkTestMessage <$> [0 .. nM - 1]))
+    deliverOrLog pool !msg = do
+      !ok <- deliver (poolInput pool) msg
+      unless
+        ok
+        ( error
+            ( "producer failed to deliver: "
+                <> show
+                  ( case msg of
+                      Dispatch k _ -> k
+                      Initialize k _ -> k
+                  )
+            )
         )
-        (Dispatch <$> [0 .. cM - 1] <*> (msgGen <$> [0 .. nM - 1]))
-      mapM_ 
-        ( \msg@(Dispatch k v) -> do
-            !ok <- deliver (poolInput pool) msg
-            unless ok (error ("producer failed to deliver: " <> show k <> " " <> show v))
-        )
-        ((`Dispatch` Nothing) <$> [0 .. cM - 1])        
-    consume allStopped 0 k _inBox = putMVar allStopped k
-    consume allStopped workLeft k inBox = do
+    -- sendPoison !runIndex !pool =     
+    --   mapM_
+    --       (deliverOrLog pool)
+    --       ((`Dispatch` Nothing) . (+ (nC * runIndex)) <$> [0 .. nC - 1])
+
+    consume k inBox = do
       receive inBox
         >>= maybe
-          (error "consumer failed to receive")
-          (const (consume allStopped (workLeft - 1) k inBox))
-    awaitAllStopped allStopped = 
+          (logError ("consumer: " <> display k <> " failed to receive a message"))
+          ( \msg@(MkTestMessage (!x, !_)) -> do
+              logDebug ("consumer: " <> display k <> " received: " <> display msg)
+              unless
+                (x == nM - 1)
+                (consume k inBox)
+          )
+
+    awaitAllStopped allStopped =
       replicateM_ nC (void $ takeMVar allStopped)
+        `withException` ( \(e :: SomeException) ->
+                            logError ("exception in awaitAllStopped: " <> display e)
+                        )

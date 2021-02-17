@@ -1,68 +1,39 @@
 module Main (main) where
 
-import Control.Monad (forM_, replicateM_, void, when)
-import Data.Foldable (traverse_)
+import RIO
+import RIO.Partial
+import RIO.ProcessPool
 import System.Environment (getArgs)
-import UnliftIO
-  ( MonadIO (liftIO),
-    MonadUnliftIO,
-    cancel,
-    mapConcurrently_,
-    tryAny,
-  )
-import UnliftIO.Concurrent
-  ( MVar,
-    newEmptyMVar,
-    putMVar,
-    takeMVar,
-  )
-import UnliftIO.MessageBox
-  ( BlockingUnlimited (BlockingUnlimited),
-    IsInput (deliver, deliver_),
-    IsMessageBox (newInput, receive),
-    IsMessageBoxArg (newMessageBox),
-  )
-import RIO.ProcessPool 
-  (
-
-    Multiplexed (..),
-    Pool (..),
-    PoolWorkerCallback (..),
-    spawnPool,
-    )
 
 main :: IO ()
 main = do
   args <- getArgs
-  let (rounds, repetitions, nWorkMessages) =
-        case args of
-          [n', r', w'] -> (read n', read r', read w')
-          [n', r'] -> (read n', read r', 10)
-          [n'] -> (read n', 1, 10)
-          _ -> (1, 1, 10)
-  putStrLn ""
-  putStrLn ""
-  putStrLn
-    ( "Benchmark: Running "
-        ++ show repetitions
-        ++ " times a benchmark with "
-        ++ show rounds
-        ++ " active processes, each processing "
-        ++ show nWorkMessages
-        ++ " work messages."
-    )
-  putStrLn ""
-  putStrLn ""
-  bench repetitions rounds nWorkMessages
+  runSimpleApp $ do
+    let (rounds, repetitions, nWorkMessages) =
+          case args of
+            [n', r', w'] -> (read n', read r', read w')
+            [n', r'] -> (read n', read r', 10)
+            [n'] -> (read n', 1, 10)
+            _ -> (1, 1, 10)
+    logInfo
+      ( "Benchmark: Running "
+          <> display repetitions
+          <> " times a benchmark with "
+          <> display rounds
+          <> " active processes, each processing "
+          <> display nWorkMessages
+          <> " work messages."
+      )
+    bench repetitions rounds nWorkMessages
 
-newtype Key = Key Int deriving newtype (Eq, Ord, Show)
+newtype Key = Key Int deriving newtype (Eq, Ord, Show, Display)
 
 data Msg = Start | Work | SyncWork (MVar Int) | Stop
 
 {-# NOINLINE bench #-}
 
 -- | Start @bSize@ clients that work 10000 work units.
-bench :: MonadUnliftIO m => Int -> Int -> Int -> m ()
+bench :: Int -> Int -> Int -> RIO SimpleApp ()
 bench repetitions bSize nWorkMessages = do
   resultBox <- newMessageBox BlockingUnlimited
   resultBoxIn <- newInput resultBox
@@ -74,13 +45,14 @@ bench repetitions bSize nWorkMessages = do
       (MkPoolWorkerCallback (enterWorkLoop resultBoxIn))
   case x of
     Left err ->
-      liftIO (putStrLn ("Error: " ++ show err))
+      logError ("Error: " <> display err)
     Right pool -> do
       forM_ [1 .. repetitions] $ \ !rep -> do
-        liftIO $ do
-          putStrLn ""
-          putStrLn ("================= BEGIN (rep: " ++ show rep ++ ") ================")
-          putStrLn ""
+        logInfo
+          ( "================= BEGIN (rep: "
+              <> display rep
+              <> ") ================"
+          )
         do
           let groupSize = 1000
           mapConcurrently_
@@ -91,47 +63,46 @@ bench repetitions bSize nWorkMessages = do
                 ]
             )
 
-          liftIO (putStrLn "Waiting for results: ")
+          logInfo "Waiting for results"
           printResults bSize resultBox
-        liftIO $ do
-          putStrLn ""
-          putStrLn ("================= DONE (rep: " ++ show rep ++ ") ================")
+
+        logInfo ("================= DONE (rep: " <> display rep <> ") ================")
       cancel (poolAsync pool)
 
 {-# NOINLINE printResults #-}
 printResults ::
-  (IsMessageBox box, MonadUnliftIO m) =>
+  (IsMessageBox box) =>
   Int ->
   box (Key, Int) ->
-  m ()
+  RIO SimpleApp ()
 printResults bSize box
   | bSize <= 0 = return ()
   | otherwise =
     receive box
       >>= maybe
-        (liftIO (putStrLn "done!"))
-        ( \res@(Key k, _) -> do
+        (logInfo "done!")
+        ( \(Key k, v) -> do
             when
               (k `mod` 1000 == 0)
-              (liftIO (putStrLn ("Result: " ++ show res)))
+              (logInfo ("Result of " <> display k <> " is: " <> display v))
             printResults (bSize - 1) box
         )
 
 {-# NOINLINE sendWork #-}
 sendWork ::
-  (IsInput input, MonadUnliftIO m) =>
+  (IsInput input) =>
   Int ->
   input (Multiplexed Key (Maybe Msg)) ->
   Key ->
-  m ()
+  RIO SimpleApp ()
 sendWork nWorkMessages poolBoxIn k@(Key x) = do
   when
     (x `mod` 1000 == 0)
-    (liftIO (putStrLn ("Delivering Messages for: " ++ show k)))
+    (logInfo ("Delivering Messages for: " <> display k))
   void $ deliver poolBoxIn (Initialize k (Just (Just Start)))
   when
     (x `mod` 1000 == 0)
-    (liftIO (putStrLn ("Delivering Sync Work Messages for: " ++ show k)))
+    (logInfo ("Delivering Sync Work Messages for: " <> display k))
   do
     resRef <- newEmptyMVar
     replicateM_
@@ -141,19 +112,17 @@ sendWork nWorkMessages poolBoxIn k@(Key x) = do
           res <- takeMVar resRef
           when
             (x `mod` 1000 == 0 && res `mod` 1000 == 0)
-            ( liftIO
-                ( putStrLn
-                    ( "Current counter of: "
-                        ++ show k
-                        ++ " is: "
-                        ++ show res
-                    )
+            ( logInfo
+                ( "Current counter of: "
+                    <> display k
+                    <> " is: "
+                    <> display res
                 )
             )
       )
   when
     (x `mod` 1000 == 0)
-    (liftIO (putStrLn ("Delivering Async Work Messages for: " ++ show k)))
+    (logInfo ("Delivering Async Work Messages for: " <> display k))
   replicateM_
     nWorkMessages
     ( deliver_ poolBoxIn (Dispatch k (Just Work))
@@ -163,59 +132,55 @@ sendWork nWorkMessages poolBoxIn k@(Key x) = do
   void $ deliver poolBoxIn (Dispatch k (Just Stop))
   when
     (x `mod` 1000 == 0)
-    (liftIO (putStrLn ("Delivered all Messages for: " ++ show k)))
+    (logInfo ("Delivered all Messages for: " <> display k))
 
 {-# NOINLINE enterWorkLoop #-}
 enterWorkLoop ::
-  (MonadUnliftIO m, IsMessageBox box, IsInput input) =>
+  (IsMessageBox box, IsInput input) =>
   input (Key, Int) ->
   Key ->
   box Msg ->
-  m ()
+  RIO SimpleApp ()
 enterWorkLoop resultBoxIn (Key k) box =
   tryAny (receive box)
     >>= ( \case
             Left ex ->
-              liftIO
-                ( putStrLn
-                    ( "Receive threw exception for worker: "
-                        ++ show k
-                        ++ " "
-                        ++ show ex
-                    )
+              logError
+                ( "Receive threw exception for worker: "
+                    <> display k
+                    <> " "
+                    <> display ex
                 )
             Right Nothing ->
-              liftIO (putStrLn ("Receive failed for worker: " ++ show k))
+              logError ("Receive failed for worker: " <> display k)
             Right (Just Start) -> do
               when
                 (k `mod` 1000 == 0)
-                (liftIO (putStrLn ("Started: " ++ show k)))
+                (logInfo ("Started: " <> display k))
               workLoop 0
             Right (Just Work) ->
-              liftIO (putStrLn ("Got unexpected Work: " ++ show k))
+              logWarn ("Got unexpected Work: " <> display k)
             Right (Just (SyncWork ref)) -> do
-              liftIO (putStrLn ("Got unexpected SyncWork: " ++ show k))
+              logWarn ("Got unexpected SyncWork: " <> display k)
               putMVar ref 0
-            Right (Just Stop) -> do
-              liftIO (putStrLn ("Got unexpected Stop: " ++ show k))
+            Right (Just Stop) ->
+              logWarn ("Got unexpected Stop: " <> display k)
         )
   where
     workLoop !counter =
       tryAny (receive box)
         >>= \case
           Left ex ->
-            liftIO
-              ( putStrLn
-                  ( "Receive threw exception for worker: "
-                      ++ show k
-                      ++ " "
-                      ++ show ex
-                  )
+            logError
+              ( "Receive threw exception for worker: "
+                  <> display k
+                  <> " "
+                  <> display ex
               )
           Right Nothing ->
-            liftIO (putStrLn ("Receive failed for worker: " ++ show k))
+            logWarn ("Receive failed for worker: " <> display k)
           Right (Just Start) -> do
-            liftIO (putStrLn ("Re-start: " ++ show k))
+            logWarn ("Re-Start: " <> display k)
             workLoop 0
           Right (Just Work) ->
             workLoop (counter + 1)
@@ -230,4 +195,4 @@ enterWorkLoop resultBoxIn (Key k) box =
             void (deliver resultBoxIn (Key k, counter))
             when
               (k `mod` 1000 == 0)
-              (liftIO (putStrLn ("Stopped: " ++ show k)))
+              (logInfo ("Stopped: " <> display k))
