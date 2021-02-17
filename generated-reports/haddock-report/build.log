@@ -1,0 +1,39 @@
+Resolving dependencies...
+Build profile: -w ghc-8.10.4 -O1
+In order, the following will be built (use -v for more details):
+ - unliftio-messagebox-2.0.0 (lib) (first run)
+ - rio-process-pool-1.0.0 (lib) (first run)
+Configuring library for unliftio-messagebox-2.0.0..
+Preprocessing library for unliftio-messagebox-2.0.0..
+Building library for unliftio-messagebox-2.0.0..
+[1 of 9] Compiling UnliftIO.MessageBox.Util.Fresh ( src/UnliftIO/MessageBox/Util/Fresh.hs, /home/sven/DEV_PUB/CONF-V.2/rio-process-pool/dist-newstyle/build/x86_64-linux/ghc-8.10.4/unliftio-messagebox-2.0.0/build/UnliftIO/MessageBox/Util/Fresh.o, /home/sven/DEV_PUB/CONF-V.2/rio-process-pool/dist-newstyle/build/x86_64-linux/ghc-8.10.4/unliftio-messagebox-2.0.0/build/UnliftIO/MessageBox/Util/Fresh.dyn_o )
+[2 of 9] Compiling UnliftIO.MessageBox.Util.CallId ( src/UnliftIO/MessageBox/Util/CallId.hs, /home/sven/DEV_PUB/CONF-V.2/rio-process-pool/dist-newstyle/build/x86_64-linux/ghc-8.10.4/unliftio-messagebox-2.0.0/build/UnliftIO/MessageBox/Util/CallId.o, /home/sven/DEV_PUB/CONF-V.2/rio-process-pool/dist-newstyle/build/x86_64-linux/ghc-8.10.4/unliftio-messagebox-2.0.0/build/UnliftIO/MessageBox/Util/CallId.dyn_o )
+[3 of 9] Compiling UnliftIO.MessageBox.Util.Future ( src/UnliftIO/MessageBox/Util/Future.hs, /home/sven/DEV_PUB/CONF-V.2/rio-process-pool/dist-newstyle/build/x86_64-linux/ghc-8.10.4/unliftio-messagebox-2.0.0/build/UnliftIO/MessageBox/Util/Future.o, /home/sven/DEV_PUB/CONF-V.2/rio-process-pool/dist-newstyle/build/x86_64-linux/ghc-8.10.4/unliftio-messagebox-2.0.0/build/UnliftIO/MessageBox/Util/Future.dyn_o )
+[4 of 9] Compiling UnliftIO.MessageBox.Class ( src/UnliftIO/MessageBox/Class.hs, /home/sven/DEV_PUB/CONF-V.2/rio-process-pool/dist-newstyle/build/x86_64-linux/ghc-8.10.4/unliftio-messagebox-2.0.0/build/UnliftIO/MessageBox/Class.o, /home/sven/DEV_PUB/CONF-V.2/rio-process-pool/dist-newstyle/build/x86_64-linux/ghc-8.10.4/unliftio-messagebox-2.0.0/build/UnliftIO/MessageBox/Class.dyn_o )
+[5 of 9] Compiling UnliftIO.MessageBox.Unlimited ( src/UnliftIO/MessageBox/Unlimited.hs, /home/sven/DEV_PUB/CONF-V.2/rio-process-pool/dist-newstyle/build/x86_64-linux/ghc-8.10.4/unliftio-messagebox-2.0.0/build/UnliftIO/MessageBox/Unlimited.o, /home/sven/DEV_PUB/CONF-V.2/rio-process-pool/dist-newstyle/build/x86_64-linux/ghc-8.10.4/unliftio-messagebox-2.0.0/build/UnliftIO/MessageBox/Unlimited.dyn_o )
+[6 of 9] Compiling UnliftIO.MessageBox.Limited ( src/UnliftIO/MessageBox/Limited.hs, /home/sven/DEV_PUB/CONF-V.2/rio-process-pool/dist-newstyle/build/x86_64-linux/ghc-8.10.4/unliftio-messagebox-2.0.0/build/UnliftIO/MessageBox/Limited.o, /home/sven/DEV_PUB/CONF-V.2/rio-process-pool/dist-newstyle/build/x86_64-linux/ghc-8.10.4/unliftio-messagebox-2.0.0/build/UnliftIO/MessageBox/Limited.dyn_o )
+[7 of 9] Compiling UnliftIO.MessageBox.Command ( src/UnliftIO/MessageBox/Command.hs, /home/sven/DEV_PUB/CONF-V.2/rio-process-pool/dist-newstyle/build/x86_64-linux/ghc-8.10.4/unliftio-messagebox-2.0.0/build/UnliftIO/MessageBox/Command.o, /home/sven/DEV_PUB/CONF-V.2/rio-process-pool/dist-newstyle/build/x86_64-linux/ghc-8.10.4/unliftio-messagebox-2.0.0/build/UnliftIO/MessageBox/Command.dyn_o )
+[8 of 9] Compiling UnliftIO.MessageBox.CatchAll ( src/UnliftIO/MessageBox/CatchAll.hs, /home/sven/DEV_PUB/CONF-V.2/rio-process-pool/dist-newstyle/build/x86_64-linux/ghc-8.10.4/unliftio-messagebox-2.0.0/build/UnliftIO/MessageBox/CatchAll.o, /home/sven/DEV_PUB/CONF-V.2/rio-process-pool/dist-newstyle/build/x86_64-linux/ghc-8.10.4/unliftio-messagebox-2.0.0/build/UnliftIO/MessageBox/CatchAll.dyn_o )
+[9 of 9] Compiling UnliftIO.MessageBox ( src/UnliftIO/MessageBox.hs, /home/sven/DEV_PUB/CONF-V.2/rio-process-pool/dist-newstyle/build/x86_64-linux/ghc-8.10.4/unliftio-messagebox-2.0.0/build/UnliftIO/MessageBox.o, /home/sven/DEV_PUB/CONF-V.2/rio-process-pool/dist-newstyle/build/x86_64-linux/ghc-8.10.4/unliftio-messagebox-2.0.0/build/UnliftIO/MessageBox.dyn_o )
+Configuring library for rio-process-pool-1.0.0..
+Preprocessing library for rio-process-pool-1.0.0..
+Running Haddock on library for rio-process-pool-1.0.0..
+Haddock coverage:
+ 100% ( 10 / 10) in 'RIO.ProcessPool.Broker'
+Warning: 'Broker' is out of scope.
+    If you qualify the identifier, haddock can try to link it anyway.
+Warning: 'Multiplixed' is out of scope.
+    If you qualify the identifier, haddock can try to link it anyway.
+Warning: 'Initialize' is out of scope.
+    If you qualify the identifier, haddock can try to link it anyway.
+ 100% (  5 /  5) in 'RIO.ProcessPool.Pool'
+Warning: RIO.ProcessPool: Could not find documentation for exported module: UnliftIO.MessageBox
+ 100% ( 14 / 14) in 'RIO.ProcessPool'
+Warning: RIO.ProcessPool.Broker: could not find link destinations for:
+    HasLogFunc Ord Display IsMessageBoxArg RIO Either SomeException Input MessageBox Async Eq == Bool /= Show showsPrec Int ShowS show String showList Maybe async cancel
+Warning: RIO.ProcessPool.Pool: could not find link destinations for:
+    Input MessageBox Maybe Async cancel async Nothing IsMessageBoxArg Ord Display HasLogFunc RIO Either SomeException finally onException
+Warning: RIO.ProcessPool: could not find link destinations for:
+    RIO Maybe Async Eq == Bool /= Show showsPrec Int ShowS show String showList HasLogFunc Ord Display IsMessageBoxArg Either SomeException Input MessageBox cancel async Nothing finally onException
+Documentation created:
+/home/sven/DEV_PUB/CONF-V.2/rio-process-pool/dist-newstyle/build/x86_64-linux/ghc-8.10.4/rio-process-pool-1.0.0/doc/html/rio-process-pool/index.html

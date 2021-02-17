@@ -18,7 +18,7 @@ mkdir -p ${TARGET}/haddock-report
 
 pushd ${HERE}
 nix-shell --run "cabal clean"
-nix-shell --pure --run "cabal haddock --htmldir ${TARGET}/haddock-report > ${TARGET}/haddock-report/build.log"
+nix-shell --run "cabal haddock --htmldir ${TARGET}/haddock-report > ${TARGET}/haddock-report/build.log"
 HTML_DIR="$(dirname $(tail -n1 ${TARGET}/haddock-report/build.log) )"
 if [[ -d "${HTML_DIR}" ]]
 then

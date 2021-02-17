@@ -1,0 +1,64 @@
+<?xml version='1.0' encoding='UTF-8' ?>
+<svg xmlns='http://www.w3.org/2000/svg' version='1.0' width='1280.0' height='720.0'>
+<defs>
+</defs>
+<g fill='#ffffff'>
+<rect x='0.0' y='0.0' width='1280.0' height='720.0' />
+</g>
+<g fill='#000000' stroke='#000000' stroke-width='1.0'>
+<text stroke='none' x='640.0' y='45.0' font-size='25.0' text-anchor='middle'>rio-process-pool-test --html test-result.html +RTS -T -xt -xc -Pa -hc -L256 (Wed Feb 17 14:47 2021)</text>
+<text stroke='none' transform='translate(30.0,360.0) rotate(-90.0)' font-size='20.0' text-anchor='middle'>bytes</text>
+<text stroke='none' x='510.0' y='690.0' font-size='20.0' text-anchor='middle'>seconds</text>
+<line x1='60.0' x2='930.0' y1='NaN' y2='NaN' />
+<line x1='90.0' x2='90.0' y1='NaN' y2='NaN' />
+<text stroke='none' x='100.0' y='NaN' font-size='15.0' text-anchor='start'>0</text>
+<line x1='133.3727' x2='133.3727' y1='NaN' y2='NaN' />
+<text stroke='none' x='143.3727' y='NaN' font-size='15.0' text-anchor='start'>0.002</text>
+<line x1='176.7455' x2='176.7455' y1='NaN' y2='NaN' />
+<text stroke='none' x='186.7455' y='NaN' font-size='15.0' text-anchor='start'>0.004</text>
+<line x1='220.1182' x2='220.1182' y1='NaN' y2='NaN' />
+<text stroke='none' x='230.1182' y='NaN' font-size='15.0' text-anchor='start'>0.006</text>
+<line x1='263.491' x2='263.491' y1='NaN' y2='NaN' />
+<text stroke='none' x='273.491' y='NaN' font-size='15.0' text-anchor='start'>0.008</text>
+<line x1='306.8637' x2='306.8637' y1='NaN' y2='NaN' />
+<text stroke='none' x='316.8637' y='NaN' font-size='15.0' text-anchor='start'>0.01</text>
+<line x1='350.2365' x2='350.2365' y1='NaN' y2='NaN' />
+<text stroke='none' x='360.2365' y='NaN' font-size='15.0' text-anchor='start'>0.012</text>
+<line x1='393.6092' x2='393.6092' y1='NaN' y2='NaN' />
+<text stroke='none' x='403.6092' y='NaN' font-size='15.0' text-anchor='start'>0.014</text>
+<line x1='436.982' x2='436.982' y1='NaN' y2='NaN' />
+<text stroke='none' x='446.982' y='NaN' font-size='15.0' text-anchor='start'>0.016</text>
+<line x1='480.3547' x2='480.3547' y1='NaN' y2='NaN' />
+<text stroke='none' x='490.3547' y='NaN' font-size='15.0' text-anchor='start'>0.018</text>
+<line x1='523.7275' x2='523.7275' y1='NaN' y2='NaN' />
+<text stroke='none' x='533.7275' y='NaN' font-size='15.0' text-anchor='start'>0.02</text>
+<line x1='567.1002' x2='567.1002' y1='NaN' y2='NaN' />
+<text stroke='none' x='577.1002' y='NaN' font-size='15.0' text-anchor='start'>0.022</text>
+<line x1='610.473' x2='610.473' y1='NaN' y2='NaN' />
+<text stroke='none' x='620.473' y='NaN' font-size='15.0' text-anchor='start'>0.024</text>
+<line x1='653.8457' x2='653.8457' y1='NaN' y2='NaN' />
+<text stroke='none' x='663.8457' y='NaN' font-size='15.0' text-anchor='start'>0.026</text>
+<line x1='697.2185' x2='697.2185' y1='NaN' y2='NaN' />
+<text stroke='none' x='707.2185' y='NaN' font-size='15.0' text-anchor='start'>0.028</text>
+<line x1='740.5912' x2='740.5912' y1='NaN' y2='NaN' />
+<text stroke='none' x='750.5912' y='NaN' font-size='15.0' text-anchor='start'>0.03</text>
+<line x1='783.964' x2='783.964' y1='NaN' y2='NaN' />
+<text stroke='none' x='793.964' y='NaN' font-size='15.0' text-anchor='start'>0.032</text>
+<line x1='827.3367' x2='827.3367' y1='NaN' y2='NaN' />
+<text stroke='none' x='837.3367' y='NaN' font-size='15.0' text-anchor='start'>0.034</text>
+<line x1='870.7095' x2='870.7095' y1='NaN' y2='NaN' />
+<text stroke='none' x='880.7095' y='NaN' font-size='15.0' text-anchor='start'>0.036</text>
+<line x1='914.0822' x2='914.0822' y1='NaN' y2='NaN' />
+<g fill-opacity='0.7'>
+<g fill='#ffffff'>
+<rect x='90.0' y='90.0' width='840.0' height='540.0' />
+</g>
+<g fill='#bf3725'>
+<path d='M 90.0,NaN L 930.0,NaN L 930.0,NaN L 90.0,NaN L 90.0,NaN Z' /></g>
+<g fill='#bf3725'>
+<rect x='990.0' y='93.375' width='27.0' height='27.0' />
+</g>
+<text stroke='none' x='1023.75' y='110.25' font-size='15.0' text-anchor='start'>(trace elements)</text>
+</g>
+</g>
+</svg>
