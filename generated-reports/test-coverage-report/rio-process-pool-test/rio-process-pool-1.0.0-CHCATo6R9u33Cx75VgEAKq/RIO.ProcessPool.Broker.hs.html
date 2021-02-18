@@ -236,7 +236,7 @@ span.spaces    { background: white }
 <span class="lineno">  217 </span><span class="spaces">    </span><span class="istickedoff">( \(ex :: SomeException) -&gt; do      </span>
 <span class="lineno">  218 </span><span class="spaces">        </span><span class="istickedoff">case fromException ex of</span>
 <span class="lineno">  219 </span><span class="spaces">          </span><span class="istickedoff">Just (_cancelled :: AsyncCancelled) -&gt;</span>
-<span class="lineno">  220 </span><span class="spaces">            </span><span class="istickedoff">logDebug <span class="nottickedoff">&quot;broker loop: cancelled&quot;</span></span>
+<span class="lineno">  220 </span><span class="spaces">            </span><span class="istickedoff">logDebug &quot;broker loop: cancelled&quot;</span>
 <span class="lineno">  221 </span><span class="spaces">          </span><span class="istickedoff">_ -&gt;</span>
 <span class="lineno">  222 </span><span class="spaces">            </span><span class="istickedoff">logError</span>
 <span class="lineno">  223 </span><span class="spaces">              </span><span class="istickedoff">( &quot;broker loop: exception while \</span>
@@ -260,7 +260,7 @@ span.spaces    { background: white }
 <span class="lineno">  241 </span><span class="spaces">                      </span><span class="istickedoff">\ caused an exception:&quot;</span>
 <span class="lineno">  242 </span><span class="spaces">                        </span><span class="istickedoff">&lt;&gt; display err</span>
 <span class="lineno">  243 </span><span class="spaces">                    </span><span class="istickedoff">)</span>
-<span class="lineno">  244 </span><span class="spaces">                  </span><span class="istickedoff">return brokerState</span>
+<span class="lineno">  244 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">return brokerState</span></span>
 <span class="lineno">  245 </span><span class="spaces">              </span><span class="istickedoff">)</span>
 <span class="lineno">  246 </span><span class="spaces">              </span><span class="istickedoff">return</span>
 <span class="lineno">  247 </span><span class="spaces">              </span><span class="istickedoff">res</span>
