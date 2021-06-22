@@ -47,7 +47,6 @@ import UnliftIO.MessageBox
   ( IsMessageBox (Input, newInput, receive),
     IsMessageBoxArg (MessageBox, newMessageBox),
   )
-import Control.Concurrent.Async(AsyncCancelled)  
 
 -- | Spawn a broker with a new 'MessageBox',
 --  and return its message 'Input' channel as well as
